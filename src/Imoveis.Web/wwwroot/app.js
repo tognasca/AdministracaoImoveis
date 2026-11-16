@@ -1,4 +1,5 @@
 import {showSettings} from './settings.js';
+import {mountPdfImport} from './pdf-import.js';
 import {mountImport} from './imports.js';
 import {app, escape, link, notice, report} from './ui.js';
 import {request} from './api.js';
@@ -35,7 +36,7 @@ async function render() {
   const [path,query] = location.hash.slice(1).split('?');
   const directRoute = {'/admin':'admin','/admin/importacoes':'importar'}[location.pathname.replace(/\/$/,'')];
   const [route,id] = (path || directRoute || '').split('/');
-  const adminRoute = ['admin','editar','importar','usuarios','configuracoes','menu'].includes(route);
+  const adminRoute = ['admin','editar','importar','pdf','usuarios','configuracoes','menu'].includes(route);
   document.body.classList.toggle('estate-site', !adminRoute);
   app.innerHTML = '<p>Carregando…</p>';
   window.scrollTo(0, 0);
@@ -51,6 +52,8 @@ async function render() {
       await showSettings(isCurrent);
     } else if (route === 'usuarios') {
       await staff(isCurrent);
+    } else if (route === 'pdf') {
+      mountPdfImport(isCurrent);
     } else if (route === 'importar') {
       if (isCurrent()) mountImport({app,request,escape,notice,report,adminNav,bindLogout,isCurrent});
     } else if (route === 'editar') {

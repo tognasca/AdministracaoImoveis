@@ -69,3 +69,7 @@ A homologação final inclui navegador no celular com HTTPS, dados reais do clie
 ### Menu público
 
 Em **Menu da vitrine**, crie categorias, altere nomes, posições e visibilidade. Selecione a categoria no cadastro do imóvel. As categorias e a galeria exibem apenas anúncios publicados. A galeria reúne anúncios com fotos. O item Contato aparece quando o WhatsApp da vitrine está configurado.
+
+### Tratar PDF
+
+No painel, abra **Tratar PDF** para extrair texto selecionável de um arquivo de até 8 MB e 100 páginas. A tela sugere imóveis a partir de colunas reconhecidas e de trechos com referências, títulos e preços. Revise a grade, consulte a página de origem e use **Usar na grade** para recuperar um trecho separado como informativo. A prévia compara o código e a origem com os cadastros existentes. O PDF original fica no histórico após a confirmação. PDFs digitalizados precisam de OCR antes do upload.

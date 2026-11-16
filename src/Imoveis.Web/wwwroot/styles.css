@@ -121,3 +121,10 @@ td input,td select { min-width: 140px; }
 .theme-opacity output { margin-left: 5px; font-variant-numeric: tabular-nums; }
 .theme-opacity input { padding: 0; border: 0; accent-color: var(--forest); }
 .theme-preview { margin-top: 12px; padding: 12px 15px; border: 1px solid var(--line); border-radius: 6px; font-weight: 600; }
+
+.pdf-grid input[type="checkbox"] { min-width: 0; }
+.pdf-grid input:not([type="checkbox"]), .pdf-grid textarea { min-width: 128px; }
+.pdf-grid pre, .pdf-fragment pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.pdf-grid details { min-width: 100px; max-width: 250px; }
+.pdf-information summary, .pdf-grid summary { cursor: pointer; }
+.pdf-fragment { padding: 14px 0; border-bottom: 1px solid var(--line); }
