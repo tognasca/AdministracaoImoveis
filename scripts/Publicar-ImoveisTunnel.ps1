@@ -22,7 +22,11 @@ function Test-Storefront {
     param([string]$Url)
     try {
         $page = Invoke-WebRequest -Uri "$Url/" -UseBasicParsing -TimeoutSec 8
-        $script = Invoke-WebRequest -Uri "$Url/app.js" -UseBasicParsing -TimeoutSec 8
+        $script = Invoke-WebRequest -Uri "$Url/api/vitrine/recursos/js/app" -UseBasicParsing -TimeoutSec 8
+        foreach ($style in @('styles', 'storefront', 'property-detail')) {
+            $css = Invoke-WebRequest -Uri "$Url/api/vitrine/recursos/css/$style" -UseBasicParsing -TimeoutSec 8
+            if ($css.StatusCode -ne 200 -or $css.Headers['Content-Type'] -notmatch '^text/css') { return $false }
+        }
         $javascript = $script.Content
         if ($javascript -is [byte[]]) { $javascript = [System.Text.Encoding]::UTF8.GetString($javascript) }
         return ($page.StatusCode -eq 200 -and $page.Content -match 'id="app"' -and

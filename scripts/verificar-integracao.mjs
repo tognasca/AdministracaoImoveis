@@ -20,9 +20,15 @@ async function call(path, method = 'GET', body, expected = 200) {
 const admin = '/api/admin/imoveis';
 await call('/health');
 assert.match(await (await call('/')).text(), /id="app"/);
-assert.match(await (await call('/app.js')).text(), /mountPdfImport/);
+const assets = '/api/vitrine/recursos';
+for (const name of ['styles', 'storefront', 'property-detail']) {
+  const response = await call(assets + '/css/' + name);
+  assert.match(response.headers.get('content-type'), /^text\/css/);
+}
+assert.match(await (await call(assets + '/js/app')).text(), /mountPdfImport/);
+await call(assets + '/js/inexistente', 'GET', undefined, 404);
 await call('/api/rota-inexistente', 'GET', undefined, 404);
-assert.match(await (await call('/admin/importacoes')).text(), /src="\/app\.js"/);
+assert.match(await (await call('/admin/importacoes')).text(), /src="\/api\/vitrine\/recursos\/js\/app"/);
 await call(admin,'GET',undefined,401);
 await call('/api/admin/login','POST',{username:'admin',password},204);
 const code = 'VALIDACAO-'+Date.now();

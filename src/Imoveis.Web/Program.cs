@@ -6,6 +6,7 @@ await WebStartup.ConfigurePipeline(app, password);
 
 var admin = app.MapGroup("/api/admin").RequireAuthorization();
 PublicEndpoints.Map(app);
+StorefrontAssetEndpoints.Map(app);
 SessionEndpoints.Map(app, admin);
 StaffEndpoints.Map(admin);
 PropertyEndpoints.Map(admin);

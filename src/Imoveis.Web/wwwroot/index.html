@@ -1,7 +1,7 @@
 <!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Imóveis Cotia</title>
-<link rel="stylesheet" href="/styles.css">
-<link rel="stylesheet" href="/storefront.css">
-<link rel="stylesheet" href="/property-detail.css">
+<link rel="stylesheet" href="/api/vitrine/recursos/css/styles">
+<link rel="stylesheet" href="/api/vitrine/recursos/css/storefront">
+<link rel="stylesheet" href="/api/vitrine/recursos/css/property-detail">
 <header><a class="brand" href="/#vitrine">⌂ Imóveis Cotia</a><button type="button" id="public-menu-toggle" aria-controls="public-menu" aria-expanded="false">Menu <span aria-hidden="true">☰</span></button><nav id="public-menu" aria-label="Menu de imóveis"></nav></header>
 <main id="app"><p>Carregando imóveis…</p></main>
 <footer class="site-footer">
@@ -9,4 +9,29 @@
     <a class="footer-brand" href="/#vitrine">Imóveis Cotia</a>
     <nav id="footer-menu" aria-label="Navegação do rodapé"></nav>
   </div>
-</footer><script type="module" src="/app.js"></script></body></html>
+</footer>
+<script type="importmap">
+{
+  "imports": {
+    "/api/vitrine/recursos/js/admin-ui.js": "/api/vitrine/recursos/js/admin-ui",
+    "/api/vitrine/recursos/js/api.js": "/api/vitrine/recursos/js/api",
+    "/api/vitrine/recursos/js/catalog.js": "/api/vitrine/recursos/js/catalog",
+    "/api/vitrine/recursos/js/editor.js": "/api/vitrine/recursos/js/editor",
+    "/api/vitrine/recursos/js/gallery.js": "/api/vitrine/recursos/js/gallery",
+    "/api/vitrine/recursos/js/image.js": "/api/vitrine/recursos/js/image",
+    "/api/vitrine/recursos/js/import-files.js": "/api/vitrine/recursos/js/import-files",
+    "/api/vitrine/recursos/js/imports.js": "/api/vitrine/recursos/js/imports",
+    "/api/vitrine/recursos/js/menu.js": "/api/vitrine/recursos/js/menu",
+    "/api/vitrine/recursos/js/pdf-import.js": "/api/vitrine/recursos/js/pdf-import",
+    "/api/vitrine/recursos/js/pdf-rows.js": "/api/vitrine/recursos/js/pdf-rows",
+    "/api/vitrine/recursos/js/property-detail.js": "/api/vitrine/recursos/js/property-detail",
+    "/api/vitrine/recursos/js/property-kinds.js": "/api/vitrine/recursos/js/property-kinds",
+    "/api/vitrine/recursos/js/settings.js": "/api/vitrine/recursos/js/settings",
+    "/api/vitrine/recursos/js/staff.js": "/api/vitrine/recursos/js/staff",
+    "/api/vitrine/recursos/js/storefront-theme.js": "/api/vitrine/recursos/js/storefront-theme",
+    "/api/vitrine/recursos/js/storefront.js": "/api/vitrine/recursos/js/storefront",
+    "/api/vitrine/recursos/js/ui.js": "/api/vitrine/recursos/js/ui"
+  }
+}
+</script>
+<script type="module" src="/api/vitrine/recursos/js/app"></script></body></html>
