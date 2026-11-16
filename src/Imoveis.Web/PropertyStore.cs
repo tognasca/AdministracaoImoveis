@@ -43,6 +43,16 @@ sealed class PropertyStore(NpgsqlDataSource db)
         return result;
     }
 
+    public async Task<int> PublishReadyDrafts(CancellationToken ct)
+    {
+        await using var command = db.CreateCommand("""
+            UPDATE properties
+               SET status = 'Publicado', version = version + 1
+             WHERE status = 'Rascunho' AND btrim(city) <> '' AND btrim(kind) <> '' AND price > 0
+            """);
+        return await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<bool> Save(Guid id, PropertyInput input, bool create, CancellationToken ct)
     {
         await using var connection = await db.OpenConnectionAsync(ct);

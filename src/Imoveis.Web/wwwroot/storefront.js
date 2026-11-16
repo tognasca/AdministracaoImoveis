@@ -32,6 +32,15 @@ function listingCard(home) {
     '" class="listing-action">Ver imóvel <span aria-hidden="true">↗</span></a></div></div></article>';
 }
 
+function showBrand(settings) {
+  const name = settings.name || 'Imóveis Cotia';
+  const brand = document.querySelector('header .brand');
+  document.title = name;
+  brand.innerHTML = (settings.logo ? '<img class="site-logo" src="' + escape(settings.logo) + '" alt="">' : '') +
+    '<span>' + escape(name) + '</span>';
+  document.querySelector('footer span').textContent = name;
+}
+
 export async function storefront(params, isCurrent) {
   const page = Math.max(1, Number.parseInt(params.get('page'), 10) || 1);
   const values = new URLSearchParams();
@@ -42,20 +51,20 @@ export async function storefront(params, isCurrent) {
   const query = next => new URLSearchParams([...values, ['page', String(next)]]);
   const [homes, settings] = await Promise.all([
     request('/api/imoveis?' + query(page)),
-    request('/api/vitrine/configuracao')
+    request('/api/vitrine/configuracao').catch(() => ({}))
   ]);
   if (!isCurrent()) return;
+  showBrand(settings);
 
   const featured = homes.find(home => home.photos.length);
   const banner = settings.banner || (featured ? photoUrl(featured.id, featured.photos[0]) : '');
   app.innerHTML = '<section class="estate-hero' + (banner ? '' : ' estate-hero-plain') + '">' +
-    '<div class="estate-hero-copy"><p class="estate-kicker">Imóveis à venda</p><h1>Encontre seu<br>próximo imóvel</h1>' +
-    '<a class="estate-explore" href="#resultados">Explorar imóveis <span aria-hidden="true">↓</span></a></div>' +
-    (banner ? '<div class="estate-banner"><img src="' + escape(banner) + '" alt="" fetchpriority="high"></div>' : '') + '</section>' +
+    (banner ? '<div class="estate-banner"><img src="' + escape(banner) + '" alt="" fetchpriority="high"></div>' : '') +
+    '<div class="estate-hero-copy"><h1>Encontre seu próximo imóvel</h1>' +
     '<form class="estate-search" id="search" aria-label="Filtrar imóveis">' +
     filters.map(([key,label,attributes]) => '<label>' + label + '<input name="' + key + '" ' +
       attributes + ' value="' + escape(values.get(key)) + '"></label>').join('') +
-    '<button type="submit">Buscar imóveis</button></form>' +
+    '<button type="submit">Buscar imóveis</button></form></div></section>' +
     '<section id="resultados" class="estate-results" aria-labelledby="listing-title"><div class="estate-section-head">' +
     '<h2 id="listing-title" tabindex="-1">' + (values.size ? 'Resultados da busca' : 'Imóveis disponíveis') + '</h2>' +
     (values.size ? '<a class="listing-action" href="/#vitrine">Limpar filtros</a>' : '') + '</div>' +
@@ -69,10 +78,6 @@ export async function storefront(params, isCurrent) {
     results.focus({preventScroll:true});
     results.scrollIntoView({block:'start'});
   }
-  document.querySelector('.estate-explore').onclick = event => {
-    event.preventDefault();
-    showResults();
-  };
   document.querySelector('#search').onsubmit = event => {
     event.preventDefault();
     const next = 'vitrine?' + new URLSearchParams([...new FormData(event.currentTarget)]
@@ -86,9 +91,10 @@ export async function storefront(params, isCurrent) {
 export async function details(id, isCurrent) {
   const [home,settings] = await Promise.all([
     request('/api/imoveis/' + encodeURIComponent(id)),
-    request('/api/vitrine/configuracao')
+    request('/api/vitrine/configuracao').catch(() => ({}))
   ]);
   if (!isCurrent()) return;
+  showBrand(settings);
   const d = home.data;
   const features = facts(d);
   app.innerHTML = '<a class="estate-back" href="/#vitrine">← Voltar à vitrine</a>' +

@@ -1,12 +1,17 @@
-sealed class BannerStore(IConfiguration configuration)
+enum StorefrontImage { Banner, Logo }
+
+sealed class StorefrontImages(IConfiguration configuration)
 {
-    private readonly string path = Path.Combine(
-        Path.GetFullPath(configuration["Media:Path"] ?? "./midia"), "vitrine-hero");
+    private readonly string directory = Path.GetFullPath(configuration["Media:Path"] ?? "./midia");
 
-    public bool Exists => File.Exists(path);
+    private string ImagePath(StorefrontImage asset) =>
+        Path.Combine(directory, asset == StorefrontImage.Banner ? "vitrine-hero" : "vitrine-logo");
 
-    public async Task<int> Save(IFormFile image, CancellationToken ct)
+    public bool Exists(StorefrontImage asset) => File.Exists(ImagePath(asset));
+
+    public async Task<int> Save(StorefrontImage asset, IFormFile image, CancellationToken ct)
     {
+        var path = ImagePath(asset);
         if (image.Length is <= 0 or > MediaStore.MaxBytes) return 413;
         await using var input = image.OpenReadStream();
         var header = new byte[12];
@@ -14,7 +19,7 @@ sealed class BannerStore(IConfiguration configuration)
             || MediaStore.Detect(header) is null) return 415;
         input.Position = 0;
 
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        Directory.CreateDirectory(directory);
         var temporary = path + "." + Guid.NewGuid().ToString("N");
         try
         {
@@ -27,8 +32,9 @@ sealed class BannerStore(IConfiguration configuration)
         finally { File.Delete(temporary); }
     }
 
-    public async Task<IResult> Read(CancellationToken ct)
+    public async Task<IResult> Read(StorefrontImage asset, CancellationToken ct)
     {
+        var path = ImagePath(asset);
         FileStream input;
         try { input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete); }
         catch (FileNotFoundException) { return Results.NotFound(); }
@@ -49,5 +55,8 @@ sealed class BannerStore(IConfiguration configuration)
         return Results.NotFound();
     }
 
-    public void Remove() => File.Delete(path);
+    public void Remove(StorefrontImage asset)
+    {
+        if (Directory.Exists(directory)) File.Delete(ImagePath(asset));
+    }
 }

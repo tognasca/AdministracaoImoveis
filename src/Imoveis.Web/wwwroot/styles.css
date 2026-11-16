@@ -74,7 +74,8 @@ td input,td select { min-width: 140px; }
 .notice { padding: 10px 12px; background: var(--quiet); border-radius: 8px; margin-bottom: 14px; }
 .spaced { justify-content: space-between; }
 .banner-preview { width: min(100%, 560px); height: clamp(130px, 25vw, 200px); object-fit: cover; display: block; border-radius: 8px; margin-bottom: 16px; }
-#banner-form, #login { max-width: 560px; }
+.logo-preview { display: block; max-width: min(100%, 200px); max-height: 80px; object-fit: contain; margin-bottom: 16px; }
+#banner-form, #logo-form, #brand-form, #login { max-width: 560px; }
 #feedback:empty { display: none; }
 @media (max-width: 675px) {
   .admin-nav #logout { margin-left: 0; }

@@ -20,7 +20,8 @@ static class WebStartup
         builder.Services.AddSingleton<PropertyStore>();
         builder.Services.AddSingleton<StaffStore>();
         builder.Services.AddSingleton<MediaStore>();
-        builder.Services.AddSingleton<BannerStore>();
+        builder.Services.AddSingleton<StorefrontImages>();
+        builder.Services.AddSingleton<StorefrontBrand>();
         builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = MediaStore.MaxBytes + 65536);
         builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
         {

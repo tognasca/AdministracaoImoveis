@@ -11,6 +11,9 @@ static class PropertyEndpoints
             var result = await db.Get(true, id, "", 1, ct);
             return result.Count == 0 ? Results.NotFound() : Results.Ok(result[0]);
         });
+        admin.MapPost("/imoveis/publicar-rascunhos", async (PropertyStore store, CancellationToken ct) =>
+            Results.Ok(new { published = await store.PublishReadyDrafts(ct) }))
+            .RequireAuthorization(policy => policy.RequireRole("Administrador"));
         admin.MapPost("/imoveis", (PropertyInput input, PropertyStore store, CancellationToken ct) =>
             Save(Guid.NewGuid(), input, true, store, ct));
         admin.MapPut("/imoveis/{id:guid}", (Guid id, PropertyInput input, PropertyStore store, CancellationToken ct) =>
