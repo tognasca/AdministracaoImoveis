@@ -62,7 +62,7 @@ function bindGallery(home) {
   }
 }
 
-export function propertyDetail(home, settings, location) {
+export function propertyDetail(home, settings, locationText) {
   const d = home.data;
   const facts = [
     ['Tipo de imóvel', d.kind],
@@ -84,7 +84,7 @@ export function propertyDetail(home, settings, location) {
   app.innerHTML = '<div class="property-page"><a class="estate-back" href="/#vitrine">← Voltar aos imóveis</a>' +
     '<header class="property-heading"><div>' +
     (d.kind ? '<p class="estate-kicker">' + escape(d.kind) + '</p>' : '') + '<h1>' + escape(d.title) + '</h1>' +
-    (location ? '<p class="property-location">' + location + '</p>' : '') + '</div>' +
+    (locationText ? '<p class="property-location">' + locationText + '</p>' : '') + '</div>' +
     '<span class="property-reference">Ref. ' + escape(d.code) + '</span></header>' +
     '<div class="property-layout"><div><section class="property-gallery" aria-label="Fotos do imóvel">' + gallery(home) + '</section>' +
     (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
