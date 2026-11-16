@@ -44,16 +44,16 @@ function showBrand(settings) {
   document.body.style.setProperty('--estate-on-accent', luminance > .179 ? '#000' : '#fff');
   document.body.style.setProperty('--estate-accent-shade', luminance > .179 ? '#fff' : '#000');
   const name = settings.name || 'Imóveis Cotia';
-  const brand = document.querySelector('header .brand');
   document.title = name;
-  brand.innerHTML = (settings.logo ? '<img class="site-logo" src="' + escape(settings.logo) + '" alt="">' : '') +
+  const brandMarkup = (settings.logo ? '<img class="site-logo" src="' + escape(settings.logo) + '" alt="">' : '') +
     '<span>' + escape(name) + '</span>';
-  document.querySelector('footer span').textContent = name;
+  document.querySelector('header .brand').innerHTML = brandMarkup;
+  document.querySelector('.footer-brand').innerHTML = brandMarkup;
 }
 
 function showMenu(settings, category, gallery) {
   const items = settings.menu ?? [];
-  document.querySelector('#public-menu').innerHTML = items.map(item => {
+  const menuMarkup = items.map(item => {
     if (item.kind === 'category')
       return '<a href="/#vitrine?category=' + encodeURIComponent(item.id) + '"' +
         (item.id === category ? ' aria-current="page"' : '') + '>' + escape(item.name) + '</a>';
@@ -64,6 +64,8 @@ function showMenu(settings, category, gallery) {
         escape(item.name) + '</a>';
     return '';
   }).join('');
+  document.querySelector('#public-menu').innerHTML = menuMarkup;
+  document.querySelector('#footer-menu').innerHTML = menuMarkup;
 }
 
 export async function storefront(params, isCurrent) {

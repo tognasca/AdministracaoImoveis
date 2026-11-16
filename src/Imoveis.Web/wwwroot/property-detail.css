@@ -1,13 +1,13 @@
 .property-page { --property-serif: var(--estate-display, Georgia, serif); }
-.property-page .estate-back { display: inline-block; margin-bottom: 26px; }
+.property-page .estate-back { display: inline-block; margin-bottom: 14px; }
 .property-heading {
-  display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 14px 28px;
-  margin-bottom: clamp(20px, 3vw, 34px); padding-bottom: clamp(16px, 2vw, 25px);
-  border-bottom: 1px solid var(--estate-rule);
+  display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap;
+  gap: 8px 24px; margin-bottom: 18px; padding: 12px clamp(14px, 2vw, 24px);
+  border-radius: 4px; background: var(--estate-accent); color: var(--estate-on-accent);
 }
-.property-heading h1 { font: 400 clamp(2.4rem, 5.2vw, 4.9rem)/1.02 var(--property-serif); margin: 0 0 8px; overflow-wrap: anywhere; }
-.property-heading .estate-kicker { margin-bottom: 9px; }
-.property-location, .property-reference { color: #526257; font-size: .88rem; margin: 0; }
+.property-heading h1 { font: 400 clamp(1.7rem, 3.2vw, 2.85rem)/1.08 var(--property-serif); margin: 0 0 4px; overflow-wrap: anywhere; }
+.property-heading .estate-kicker { margin: 0 0 4px; color: inherit; letter-spacing: .12em; }
+.property-location, .property-reference { color: inherit; font-size: .83rem; margin: 0; }
 .property-reference { letter-spacing: .06em; overflow-wrap: anywhere; }
 .property-layout { display: grid; grid-template-columns: minmax(0, 2.18fr) minmax(260px, 1fr); gap: clamp(20px, 3vw, 38px); align-items: start; }
 .property-photo-stage, .property-photo-empty { position: relative; aspect-ratio: 1.65; background: #dedcd0; border-radius: 5px; overflow: hidden; }

@@ -10,10 +10,7 @@
   background: var(--estate-paper);
   color: var(--estate-ink);
 }
-.estate-site > header,
-.estate-site > footer {
-  color: var(--estate-ink);
-  background: var(--estate-paper);
+.estate-site > header {
   padding-inline: max(5vw, calc((100% - 1280px) / 2));
 }
 .estate-site > header {
@@ -25,7 +22,30 @@
   border-bottom: 1px solid color-mix(in srgb, currentColor 30%, transparent);
 }
 .estate-site > header :focus-visible { outline-color: currentColor; }
-.estate-site > footer { border-top: 1px solid var(--estate-rule); }
+.footer-brand { text-decoration: none; }
+#footer-menu { display: none; }
+.estate-site .site-footer {
+  display: block;
+  padding: 0 clamp(16px, 5vw, 80px);
+  color: var(--estate-on-accent);
+  background: var(--estate-accent);
+  background: linear-gradient(110deg, var(--estate-accent),
+    color-mix(in srgb, var(--estate-accent), var(--estate-accent-shade) 65%));
+  border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+}
+.estate-site .site-footer-inner {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 12px 36px; width: min(100%, 1280px); margin: 0 auto; padding: 20px 0;
+}
+.estate-site .footer-brand {
+  display: inline-flex; align-items: center; gap: 12px;
+  font: 400 clamp(1.25rem, 3vw, 1.65rem)/1.2 var(--estate-display); overflow-wrap: anywhere;
+}
+.estate-site .site-footer .site-logo { height: 34px; }
+.estate-site #footer-menu:not(:empty) { display: flex; gap: 8px 22px; }
+.estate-site #footer-menu a { font-size: .85rem; text-underline-offset: 4px; text-decoration: none; padding-block: 5px; }
+.estate-site #footer-menu a:hover, .estate-site #footer-menu a[aria-current="page"] { text-decoration: underline; }
+.estate-site .site-footer :focus-visible { outline-color: currentColor; }
 .estate-site .brand { font: 400 clamp(1.4rem, 3vw, 1.8rem)/1.1 var(--estate-display); }
 .estate-site header nav { gap: 8px clamp(16px, 3vw, 36px); font-size: .91rem; letter-spacing: .075em; }
 .estate-site header nav a { padding-block: 8px; text-underline-offset: 5px; }
