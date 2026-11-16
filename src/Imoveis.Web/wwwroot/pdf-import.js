@@ -50,7 +50,7 @@ export function mountPdfImport(isCurrent) {
 
   function edit() {
     const body = rows.map((row,index) => '<tr data-row="'+index+'"><td><input type="checkbox" data-field="selected" ' +
-      (row.selected ? 'checked ' : '') + 'aria-label="Incluir registro '+(index+1)+'"></td><td>' +
+      (row.selected ? 'checked ' : '') + 'aria-label="Incluir registro '+(index+1)+'"></td><td><button type="button" class="alt" data-delete-row aria-label="Excluir registro '+(index+1)+'">Excluir</button></td><td>' +
       (row.page ? '<details><summary>Pág. '+row.page+'</summary><pre>'+escape(row.text)+'</pre></details>' : 'Manual') + '</td>' +
       columns.map(([key,label,limit]) => {
         const attributes = ' data-field="'+key+'" maxlength="'+limit+'" aria-label="'+label+' do registro '+(index+1)+'"';
@@ -60,10 +60,10 @@ export function mountPdfImport(isCurrent) {
       }).join('') + '</tr>').join('');
     shell('<form id="pdf-review"><section class="box"><h3>'+escape(file.name)+'</h3>' +
       '<label>Origem dos códigos<input name="source" required maxlength="100" value="'+escape(source)+'"></label>' +
-      '<p class="muted">Confirme os campos sugeridos e desmarque os registros que devem ficar de fora.</p></section>' +
-      '<h3>Imóveis candidatos</h3><div class="box table pdf-grid"><table><thead><tr><th>Incluir</th><th>Origem no PDF</th>' +
+      '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
+      '<h3>Imóveis candidatos</h3><div class="box table pdf-grid"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
-      (body || '<tr><td colspan="12">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
+      (body || '<tr><td colspan="13">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
       '</tbody></table></div><div class="row"><button type="button" class="alt" id="pdf-back">Trocar PDF</button>' +
       '<button type="button" class="alt" id="pdf-add">Adicionar linha</button><button id="pdf-check">Conferir antes de importar</button></div></form>' +
       '<details class="box pdf-information"><summary>Trechos informativos ('+information.length+')</summary>' +
@@ -79,6 +79,17 @@ export function mountPdfImport(isCurrent) {
       const key = event.target.dataset.field;
       if (key === 'selected') item.selected = event.target.checked;
       else if (key) item.data[key] = event.target.value;
+    };
+    form.onclick = event => {
+      const button = event.target.closest('[data-delete-row]');
+      if (!button || busy) return;
+      const index = Number(button.closest('tr[data-row]').dataset.row);
+      rows.splice(index, 1);
+      edit();
+      const nextIndex = Math.min(index, rows.length - 1);
+      const next = rows.length ? app.querySelector('tr[data-row="'+nextIndex+'"] [data-delete-row]') : app.querySelector('#pdf-add');
+      next?.focus();
+      report('Linha removida da revisão.');
     };
     app.querySelector('#pdf-back').onclick = () => { if (!busy && window.confirm('Trocar o PDF e descartar a revisão atual?')) choose(); };
     function insert(item) {
