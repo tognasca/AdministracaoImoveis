@@ -43,7 +43,10 @@ try {
   await call(admin+'/'+id,'PUT',{...home.data,status:'Publicado'},204);
   const endpoint = '/api/admin/importacoes';
   const [row] = await call(endpoint+'/conferencia','POST',{source:data.source,codes:[data.code]});
-  await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',
+  const signature = 'a'.repeat(64);
+  const original = Buffer.from('Código;Preço\n'+code+';540000','utf8');
+  await call(endpoint+'/modelos/'+signature,'PUT',{source:data.source,mapping:['code','price']},204);
+  await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',originalFile:original.toString('base64'),
     rows:[{...row,data:{...row.data,price:540000}}]});
   const published = await call('/api/imoveis/'+id);
   assert.equal(published.data.price,540000);
@@ -52,7 +55,18 @@ try {
   assert.equal(published.data.status,'Publicado');
   await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',rows:[row]},409);
   await call('/media/'+id+'/'+published.photos[0]);
-  assert((await call(endpoint+'/historico')).some(item=>item.filename==='validacao.csv'));
+  await call('/api/admin/logout','POST',undefined,204);
+  cookie = undefined;
+  await call(endpoint+'/modelos','GET',undefined,401);
+  await call('/api/admin/login','POST',{username:'admin',password},204);
+  const models = await call(endpoint+'/modelos');
+  assert(models.some(model=>model.signature===signature && model.source===data.source && model.mappedFields===2));
+  const model = (await call(endpoint+'/modelos/'+signature)).find(model=>model.source===data.source);
+  assert.deepEqual(model.mapping,['code','price']);
+  const entry = (await call(endpoint+'/historico')).find(item=>item.filename==='validacao.csv' && item.source===data.source);
+  assert(entry?.hasOriginal);
+  const saved = await call(endpoint+'/historico/'+entry.id+'/arquivo');
+  assert.deepEqual(Buffer.from(await saved.arrayBuffer()),original);
 } finally {
   const home = await call(admin+'/'+id);
   await call(admin+'/'+id,'PUT',{...home.data,status:'Retirado'},204);

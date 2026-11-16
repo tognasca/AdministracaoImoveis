@@ -78,20 +78,29 @@ export function prepare(rows,mapping,existing,source) {
 }
 export function mountImport(ui) {
   const {app,request,escape,notice,report,adminNav,bindLogout,isCurrent} = ui;
+  let originalFile = null;
   let rows = [], fileName = '', mapping = [], source = '', signature = '', models = [], lookupText = '';
   const start = stage => {
     app.innerHTML = adminNav()+'<h2>Importar imóveis</h2><p class="muted">'+stage+' de 3 · Arquivo → Mapeamento → Conferência</p>'+notice;
     bindLogout();
   };
   const choose = () => {
+    originalFile = null;
     start(1);
     app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV ou TXT delimitado. No Excel, será usada a primeira aba.</p>'+
       '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt"></label>'+
-      '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
+      '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
+    const savedModels = app.querySelector('#saved-models');
+    request(endpoint+'/modelos').then(items => {
+      savedModels.innerHTML = '<h3>Mapeamentos salvos</h3>' + (items.map(item => '<p><strong>'+escape(item.source)+
+        '</strong> · '+item.mappedFields+' campos · '+escape(new Date(item.updatedAt).toLocaleString('pt-BR'))+'</p>').join('') ||
+        '<p>Nenhum mapeamento salvo.</p>');
+    }).catch(() => { savedModels.innerHTML = '<h3>Mapeamentos salvos</h3><p>Não foi possível consultar os modelos.</p>'; });
     const history = app.querySelector('#history');
     request(endpoint+'/historico').then(items => {
       history.innerHTML = '<h3>Últimas importações</h3>' + (items.map(item => '<p>'+escape(item.filename)+
-        ' · '+escape(item.source)+' · '+item.count+' registros · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+'</p>').join('') ||
+        ' · '+escape(item.source)+' · '+item.count+' registros · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+
+        (item.hasOriginal ? ' · <a href="'+endpoint+'/historico/'+encodeURIComponent(item.id)+'/arquivo">Baixar original</a>' : '')+'</p>').join('') ||
         '<p>Nenhum arquivo importado.</p>');
     }).catch(() => { history.innerHTML = '<h3>Últimas importações</h3><p>Não foi possível consultar o histórico.</p>'; });
     app.querySelector('#example').onclick = () => download('imoveis-exemplo.csv',example);
@@ -105,6 +114,7 @@ export function mountImport(ui) {
         if (rows.length < 2 || rows[0].length < 1) throw Error('Inclua o cabeçalho e ao menos uma linha de dados.');
         if (rows.length > 5001 || rows[0].length > 100) throw Error('Use até 5.000 registros e 100 colunas por arquivo.');
         fileName = file.name;
+        originalFile = file;
         const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(Array.from(rows[0],normalize))));
         signature = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('');
         models = await request(endpoint+'/modelos/'+signature);
@@ -135,7 +145,7 @@ export function mountImport(ui) {
         '<option value="">Ignorar</option>'+options.map(([key,name]) => '<option value="'+key+'"'+
         (mapping[index]===key?' selected':'')+'>'+name+'</option>').join('')+'</select></td></tr>').join('')+
       '</tbody></table></div><label style="display:flex;align-items:center"><input style="width:auto" type="checkbox" name="save" checked> Salvar mapeamento nesta origem</label>'+
-      '<p></p><button type="button" class="alt" id="choose">Trocar arquivo</button> <button id="review">Revisar importação</button></form>');
+      '<div class="row"><button type="button" class="alt" id="choose">Trocar arquivo</button><button type="button" class="alt" id="save-model">Salvar mapeamento agora</button><button id="review">Revisar importação</button></div></form>');
     app.querySelector('#choose').onclick = choose;
     const select = app.querySelector('#models');
     if (select) select.onchange = () => {
@@ -146,23 +156,42 @@ export function mountImport(ui) {
       source = model.source;
       map();
     };
-    app.querySelector('#mapping').onsubmit = async event => {
-      event.preventDefault();
-      const form = new FormData(event.target);
+    const formElement = app.querySelector('#mapping');
+    function readMapping() {
+      const form = new FormData(formElement);
       source = form.get('source').trim();
       mapping = mapping.map((_,i) => form.get('column'+i));
       const mapped = mapping.filter(Boolean);
-      if (!source || !mapped.includes('code') || new Set(mapped).size !== mapped.length) {
-        report('Informe a origem e mapeie o código. Use cada destino uma vez.');
-        return;
-      }
+      if (!source || !mapped.includes('code') || new Set(mapped).size !== mapped.length)
+        throw Error('Informe a origem e mapeie o código. Use cada destino uma vez.');
+      return form;
+    }
+    async function saveMapping() {
+      await request(endpoint+'/modelos/'+signature,'PUT',{source,mapping});
+      const index = models.findIndex(model => model.source === source);
+      const model = {source,mapping:[...mapping]};
+      if (index < 0) models.push(model);
+      else models[index] = model;
+    }
+    const saveButton = app.querySelector('#save-model');
+    saveButton.onclick = async () => {
+      saveButton.disabled = true;
+      try { readMapping(); await saveMapping(); if (isCurrent()) report('Mapeamento salvo no banco.'); }
+      catch (error) { if (isCurrent()) report(error.message); }
+      finally { saveButton.disabled = false; }
+    };
+    formElement.onsubmit = async event => {
+      event.preventDefault();
+      let form;
+      try { form = readMapping(); }
+      catch (error) { report(error.message); return; }
       const button = app.querySelector('#review');
       button.disabled = true;
       try {
         const codeIndex = mapping.indexOf('code');
         const codes = [...new Set(rows.slice(1).map(row => String(row[codeIndex] ?? '').trim()).filter(code => code.length && code.length <= 80))];
         const existing = await request(endpoint+'/conferencia','POST',{source,codes});
-        if (form.has('save')) await request(endpoint+'/modelos/'+signature,'PUT',{source,mapping});
+        if (form.has('save')) await saveMapping();
         lookupText = 'Origem '+source+' · '+fileName;
         if (isCurrent()) review(prepare(rows.slice(1),mapping,existing,source));
       } catch (error) { if (isCurrent()) report(error.message); }
@@ -171,6 +200,7 @@ export function mountImport(ui) {
   };
   const review = preview => {
     start(3);
+    const file = originalFile;
     const valid = preview.filter(row => row.status === 'Criar' || row.status === 'Atualizar');
     const rejected = preview.filter(row => row.status === 'Revisar');
     app.insertAdjacentHTML('beforeend','<p>'+escape(lookupText)+'</p><div class="row">'+
@@ -189,7 +219,13 @@ export function mountImport(ui) {
       const button = event.target;
       button.disabled = true;
       try {
-        const result = await request(endpoint+'/confirmacao','POST',{source,filename:fileName,rows:valid.map(({id,data}) => ({id,data}))});
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let binary = '';
+        for (let offset = 0; offset < bytes.length; offset += 16384)
+          binary += String.fromCharCode(...bytes.subarray(offset,offset+16384));
+        const result = await request(endpoint+'/confirmacao','POST',{
+          source,filename:fileName,originalFile:btoa(binary),rows:valid.map(({id,data}) => ({id,data}))
+        });
         if (isCurrent()) { choose(); report(result.count+' imóveis gravados. Os novos cadastros estão em rascunho.'); }
       }
       catch (error) { if (isCurrent()) report(error.message); button.disabled = false; }

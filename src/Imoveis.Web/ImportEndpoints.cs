@@ -4,8 +4,9 @@ using Npgsql;
 record ImportModel(string Source, string[] Mapping);
 record ImportLookup(string Source, string[] Codes);
 record ImportRow(Guid? Id, PropertyInput Data);
-record ImportBatch(string Source, string Filename, ImportRow[] Rows);
-record ImportHistory(string Source, string Filename, int Count, DateTime CreatedAt);
+record ImportBatch(string Source, string Filename, ImportRow[] Rows, byte[]? OriginalFile = null);
+record ImportHistory(long Id, string Source, string Filename, int Count, DateTime CreatedAt, bool HasOriginal);
+record SavedImportModel(string Signature, string Source, int MappedFields, DateTime UpdatedAt);
 
 static class ImportEndpoints
 {
@@ -19,10 +20,33 @@ static class ImportEndpoints
         group.MapGet("/historico", async (NpgsqlDataSource db, CancellationToken ct) =>
         {
             await using var query = db.CreateCommand("""
-                SELECT source,filename,imported,created_at FROM import_history ORDER BY id DESC LIMIT 30
+                SELECT id,source,filename,imported,created_at,original_file IS NOT NULL FROM import_history ORDER BY id DESC LIMIT 30
                 """);
             await using var reader = await query.ExecuteReaderAsync(ct);
             var result = new List<ImportHistory>();
+            while (await reader.ReadAsync(ct))
+                result.Add(new(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetInt32(3), reader.GetDateTime(4), reader.GetBoolean(5)));
+            return Results.Ok(result);
+        });
+        group.MapGet("/historico/{id:long}/arquivo", async (long id, NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            await using var query = db.CreateCommand("""
+                SELECT filename,original_file FROM import_history WHERE id=@id AND original_file IS NOT NULL
+                """);
+            query.Parameters.AddWithValue("id", id);
+            await using var reader = await query.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return Results.NotFound();
+            return Results.File(reader.GetFieldValue<byte[]>(1), "application/octet-stream", reader.GetString(0));
+        });
+        group.MapGet("/modelos", async (NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            await using var query = db.CreateCommand("""
+                SELECT signature,source,(SELECT count(*)::int FROM jsonb_array_elements_text(mapping) AS f(field)
+                    WHERE f.field <> ''), updated_at
+                FROM import_models ORDER BY updated_at DESC
+                """);
+            await using var reader = await query.ExecuteReaderAsync(ct);
+            var result = new List<SavedImportModel>();
             while (await reader.ReadAsync(ct))
                 result.Add(new(reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetDateTime(3)));
             return Results.Ok(result);
@@ -82,6 +106,9 @@ static class ImportEndpoints
             if (!ValidSource(input.Source) || string.IsNullOrWhiteSpace(input.Filename) || input.Filename.Length > 255 || input.Rows is not { Length: > 0 and <= 5000 }
                 || input.Rows.Any(row => row?.Data is null))
                 return Results.BadRequest("Lote inválido.");
+            if (input.OriginalFile is { } file && (file.Length is <= 0 or > 8_000_000
+                || Path.GetExtension(input.Filename).ToLowerInvariant() is not (".csv" or ".txt" or ".xlsx")))
+                return Results.BadRequest("O arquivo original deve ser Excel, CSV ou TXT de até 8 MB.");
             var source = input.Source.Trim();
             var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
@@ -114,11 +141,12 @@ static class ImportEndpoints
                         return Results.Conflict("Um imóvel mudou. Gere a prévia novamente antes de importar.");
                 }
                 await using var history = new NpgsqlCommand("""
-                    INSERT INTO import_history(source,filename,imported) VALUES(@source,@filename,@imported)
+                    INSERT INTO import_history(source,filename,imported,original_file) VALUES(@source,@filename,@imported,@original)
                     """, connection, transaction);
                 history.Parameters.AddWithValue("source", source);
                 history.Parameters.AddWithValue("filename", input.Filename);
                 history.Parameters.AddWithValue("imported", input.Rows.Length);
+                history.Parameters.AddWithValue("original", NpgsqlTypes.NpgsqlDbType.Bytea, (object?)input.OriginalFile ?? DBNull.Value);
                 await history.ExecuteNonQueryAsync(ct);
                 await transaction.CommitAsync(ct);
                 return Results.Ok(new { count = input.Rows.Length });
