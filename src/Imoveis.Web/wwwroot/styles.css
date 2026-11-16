@@ -79,8 +79,6 @@ td input,td select { min-width: 140px; }
 #feedback:empty { display: none; }
 @media (max-width: 675px) {
   .admin-nav #logout { margin-left: 0; }
-  .filter-bar { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .filter-bar label:first-child { grid-column: 1/-1; }
 }
 
 .theme-color { margin-top: 14px; }
@@ -106,3 +104,15 @@ td input,td select { min-width: 140px; }
 .menu-error { color: #942d28; }
 
 .storefront-contact-settings { margin-top: 16px; }
+
+.table { max-width: 100%; overscroll-behavior-inline: contain; }
+.table :is(td, th) { overflow-wrap: anywhere; }
+@media (max-width: 675px) {
+  .admin-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .admin-nav :is(a, button) { min-height: 44px; text-align: center; padding-inline: 7px; }
+  .admin-nav #logout { width: 100%; }
+  .filter-bar { grid-template-columns: minmax(0, 1fr); }
+  .filter-bar button { width: 100%; }
+  .table table { min-width: 450px; }
+  .menu-actions { flex-wrap: nowrap; }
+}

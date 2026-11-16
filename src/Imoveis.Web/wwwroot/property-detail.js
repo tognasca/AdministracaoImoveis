@@ -86,12 +86,13 @@ export function propertyDetail(home, settings, locationText) {
     (d.kind ? '<p class="estate-kicker">' + escape(d.kind) + '</p>' : '') + '<h1>' + escape(d.title) + '</h1>' +
     (locationText ? '<p class="property-location">' + locationText + '</p>' : '') + '</div>' +
     '<span class="property-reference">Ref. ' + escape(d.code) + '</span></header>' +
-    '<div class="property-layout"><div><section class="property-gallery" aria-label="Fotos do imóvel">' + gallery(home) + '</section>' +
+    '<div class="property-layout"><section class="property-gallery" aria-label="Fotos do imóvel">' + gallery(home) + '</section>' +
+    '<aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price"><p>Valor do imóvel</p>' +
+    '<strong>' + money(d.price) + '</strong></div>' +
+    contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside>' +
     (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
-    '</div><aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price"><p>Valor do imóvel</p>' +
-    '<strong>' + money(d.price) + '</strong></div>' +
-    contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside></div></div>';
+    '</div></div>';
   bindGallery(home);
   if (!contact) return;
   const form = app.querySelector('#property-contact-form');

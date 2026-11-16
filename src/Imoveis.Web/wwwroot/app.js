@@ -9,8 +9,27 @@ import {editor} from './editor.js';
 import {manageMenu} from './menu.js';
 import {staff} from './staff.js';
 
+const menuToggle = document.querySelector('#public-menu-toggle');
+const publicHeader = menuToggle.closest('header');
+function setPublicMenu(expanded) {
+  publicHeader.classList.toggle('menu-open', expanded);
+  menuToggle.setAttribute('aria-expanded', String(expanded));
+}
+menuToggle.onclick = () => setPublicMenu(menuToggle.getAttribute('aria-expanded') !== 'true');
+publicHeader.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || menuToggle.getAttribute('aria-expanded') !== 'true') return;
+  setPublicMenu(false);
+  menuToggle.focus();
+});
+document.querySelector('#public-menu').addEventListener('click', event => {
+  if (!event.target.closest('a') || menuToggle.getAttribute('aria-expanded') !== 'true') return;
+  setPublicMenu(false);
+  menuToggle.focus();
+});
+
 let navigation = 0;
 async function render() {
+  setPublicMenu(false);
   const current = ++navigation;
   const isCurrent = () => current === navigation;
   const [path,query] = location.hash.slice(1).split('?');
