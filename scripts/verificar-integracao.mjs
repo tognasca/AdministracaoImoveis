@@ -24,7 +24,7 @@ await call(admin,'GET',undefined,401);
 await call('/api/admin/login','POST',{username:'admin',password},204);
 const code = 'VALIDACAO-'+Date.now();
 const data = {code,source:'Teste de integração',title:'Imóvel de teste '+code,kind:'Casa',district:'Centro',city:'Cotia',
-  price:550000,bedrooms:2,size:95,status:'Rascunho',album:'https://example.com/album',version:0};
+  price:550000,bedrooms:2,size:95,status:'Rascunho',album:'https://example.com/album',version:0,notes:'Confirmar disponibilidade antes da visita.'};
 const {id} = await call(admin,'POST',data,201);
 const storefront = '/api/imoveis?q=' + encodeURIComponent(code);
 try {
@@ -40,6 +40,7 @@ try {
   await call(admin+'/'+id+'/fotos','POST',upload(),409);
   let home = await call(admin+'/'+id);
   assert.equal(home.photos.length,5);
+  assert.equal(home.data.notes,data.notes);
   await call(admin+'/'+id+'/fotos/'+home.photos[4]+'/capa','PUT',undefined,204);
   home = await call(admin+'/'+id);
   await call(admin+'/'+id,'PUT',{...home.data,status:'Publicado'},204);
@@ -50,10 +51,12 @@ try {
   const original = Buffer.from('Código;Preço\n'+code+';540000','utf8');
   await call(endpoint+'/modelos/'+signature,'PUT',{source:data.source,mapping:['code','price']},204);
   await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',originalFile:original.toString('base64'),
-    rows:[{...row,data:{...row.data,price:540000}}]});
+    rows:[{...row,data:{...row.data,price:540000,notes:undefined}}]});
   const published = await call('/api/imoveis/'+id);
   assert((await call(storefront)).some(item => item.id === id && item.data.price === 540000));
   assert.equal(published.data.price,540000);
+  assert.equal(published.data.notes ?? null,null);
+  assert.equal((await call(admin+'/'+id)).data.notes,data.notes);
   assert.equal(published.data.album,data.album);
   assert.deepEqual(published.photos,home.photos);
   assert.equal(published.data.status,'Publicado');

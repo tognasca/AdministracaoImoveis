@@ -41,6 +41,8 @@ export async function editor(id, isCurrent) {
       '</h3><div class="grid">' + fields.filter(([key]) => keys.includes(key)).map(field).join('') +
       (title === 'Publicação' ? statusField + categoryField : '') + '</div>' +
       (title === 'Publicação' ? '<p id="visibility">' + visibility(d.status) + '</p>' : '') + '</section>').join('') +
+    '<section class="box"><h3>Observações internas</h3><label for="property-notes">Observações</label>' +
+    '<textarea id="property-notes" name="notes" rows="4" maxlength="2000">' + escape(d.notes) + '</textarea></section>' +
     '<div class="row"><button>Salvar imóvel</button><button type="submit" value="publish" id="publish"' +
     (d.status === 'Publicado' ? ' hidden' : '') + '>Salvar e publicar</button></div></form><p></p>' +
     (home ? '<section class="box" id="gallery"></section>' : '<p>Salve o cadastro para adicionar as fotos.</p>');

@@ -2,16 +2,16 @@ import {delimited, excel} from './import-files.js';
 
 const endpoint = '/api/admin/importacoes';
 const labels = {code:'Código do imóvel',title:'Título',kind:'Tipo de imóvel',bedrooms:'Dormitórios',
-  district:'Bairro',city:'Cidade',location:'Bairro e cidade',price:'Preço',size:'Área (m²)'};
+  district:'Bairro',city:'Cidade',location:'Bairro e cidade',price:'Preço',size:'Área (m²)',notes:'Observações'};
 const aliases = {code:['codigo','cod','id','codigoimovel'],title:['titulo','nome','descricao'],
   kind:['ctipo','tipoimovel','tipo'],bedrooms:['dormitorio','dormitorios','dormitoriosquanto','quartos'],
   district:['bairro'],city:['cidade','municipio'],location:['local','localizacao'],
-  price:['valor','preco','vlvenda','precovenda'],size:['area','aream2','metragem']};
+  price:['valor','preco','vlvenda','precovenda'],size:['area','aream2','metragem'],notes:['observacao','observacoes','obs','notas']};
 const normalize = value => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLowerCase().replace(/[^a-z0-9]/g,'');
 const codeKey = value => String(value ?? '').trim().toLowerCase();
-const emptyData = {title:'',kind:'',district:'',city:'',price:0,bedrooms:0,size:0,status:'Rascunho',version:0};
-const example = 'CODIGO;CTIPO;Dormitórios quanto;Local;VL_VENDA;Título\r\nIM-104;CASA;03;Granja Viana - Cotia/SP;875000;Casa na Granja Viana\r\nIM-105;APTO;02;Centro - Cotia/SP;380000;Apartamento no Centro';
+const emptyData = {title:'',kind:'',district:'',city:'',price:0,bedrooms:0,size:0,notes:'',status:'Rascunho',version:0};
+const example = 'CODIGO;CTIPO;Dormitórios quanto;Local;VL_VENDA;Título;Observações\r\nIM-104;CASA;03;Granja Viana - Cotia/SP;875000;Casa na Granja Viana;Confirmar disponibilidade antes da visita\r\nIM-105;APTO;02;Centro - Cotia/SP;380000;Apartamento no Centro;Agendar visita com antecedência';
 function download(name, content) {
   const url = URL.createObjectURL(new Blob(['\ufeff',content], {type:'text/csv;charset=utf-8'}));
   const a = Object.assign(document.createElement('a'), {href:url,download:name});
@@ -67,13 +67,13 @@ export function prepare(rows,mapping,existing,source) {
     const data = {...emptyData,...prior?.data,...patch,source};
     if (prior) data.code = prior.data.code;
     if (!data.title) data.title = [data.kind || 'Imóvel', data.district && 'em '+data.district,data.code].filter(Boolean).join(' ');
-    for (const [field,limit] of Object.entries({code:80,title:160,kind:80,district:100,city:100}))
+    for (const [field,limit] of Object.entries({code:80,title:160,kind:80,district:100,city:100,notes:2000}))
       if ((data[field]?.length ?? 0) > limit) errors.push(labels[field]+' acima de '+limit+' caracteres');
     const changes = prior ? Object.keys(patch).filter(field => field !== 'code' &&
       String(prior.data[field] ?? '') !== String(data[field] ?? '')) : [];
     return {line:index+2,id:prior?.id ?? null,data,
       status:errors.length ? 'Revisar' : prior ? changes.length ? 'Atualizar' : 'Sem alteração' : 'Criar',
-      note:errors.join(' · ') || (prior ? changes.map(field => labels[field]+': '+prior.data[field]+' → '+data[field]).join(' · ') : data.title)};
+      note:errors.join(' · ') || (prior ? changes.map(field => labels[field]+': '+(prior.data[field] ?? '')+' → '+data[field]).join(' · ') : data.title)};
   });
 }
 export function mountImport(ui) {

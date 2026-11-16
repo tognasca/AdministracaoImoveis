@@ -10,6 +10,8 @@ static class PropertyValidation
             || input.Bedrooms is < 0 or > 1000 || input.Size is < 0 or >= 10000000000m
             || input.Status is not ("Rascunho" or "Publicado" or "Vendido" or "Retirado"))
             return "Confira os campos do imóvel.";
+        if (input.Notes is { Length: > 2000 } || input.Notes?.Contains('\0') == true)
+            return "Informe observações válidas com até 2.000 caracteres.";
         if (!string.IsNullOrWhiteSpace(input.Album) && (input.Album.Length > 2048
             || !Uri.TryCreate(input.Album.Trim(), UriKind.Absolute, out var link) || link.Scheme is not ("https" or "http")))
             return "Informe um endereço HTTP ou HTTPS para o álbum.";

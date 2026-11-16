@@ -1,14 +1,14 @@
 using Npgsql;
 
 record PropertyInput(string Code, string Source, string Title, string Kind, string District, string City,
-    decimal Price, int Bedrooms, decimal Size, string Status, string? Album, int Version, Guid? CategoryId = null);
+    decimal Price, int Bedrooms, decimal Size, string Status, string? Album, int Version, Guid? CategoryId = null, string? Notes = null);
 record Property(Guid Id, PropertyInput Data, Guid[] Photos);
 
 sealed class PropertyStore(NpgsqlDataSource db)
 {
     private const string Columns = """
         p.id, p.code, p.source, p.title, p.kind, p.district, p.city, p.price, p.bedrooms,
-        p.size, p.status, p.album, p.version, p.category_id,
+        p.size, p.status, p.album, p.version, p.category_id, CASE WHEN @admin THEN p.notes END,
         ARRAY(SELECT id FROM photos WHERE property_id=p.id ORDER BY slot)
         """;
 
@@ -44,7 +44,8 @@ sealed class PropertyStore(NpgsqlDataSource db)
                 reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6),
                 reader.GetDecimal(7), reader.GetInt32(8), reader.GetDecimal(9), reader.GetString(10),
                 reader.IsDBNull(11) ? null : reader.GetString(11), reader.GetInt32(12),
-                reader.IsDBNull(13) ? null : reader.GetGuid(13)), reader.GetFieldValue<Guid[]>(14)));
+                reader.IsDBNull(13) ? null : reader.GetGuid(13),
+                reader.IsDBNull(14) ? null : reader.GetString(14)), reader.GetFieldValue<Guid[]>(15)));
         return result;
     }
 
@@ -68,11 +69,12 @@ sealed class PropertyStore(NpgsqlDataSource db)
         NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct)
     {
         await using var command = new NpgsqlCommand(create ? """
-            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id)
-            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category)
+            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes)
+            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''))
             """ : """
             UPDATE properties SET code=@code,source=@source,title=@title,kind=@kind,district=@district,
-                city=@city,price=@price,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,version=version+1
+                city=@city,price=@price,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,
+                notes=CASE WHEN @notes IS NULL THEN notes ELSE NULLIF(@notes,'') END,version=version+1
             WHERE id=@id AND version=@version
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id);
@@ -89,6 +91,8 @@ sealed class PropertyStore(NpgsqlDataSource db)
         command.Parameters.AddWithValue("album", NpgsqlTypes.NpgsqlDbType.Text,
             string.IsNullOrWhiteSpace(input.Album) ? DBNull.Value : input.Album.Trim());
         command.Parameters.AddWithValue("category", NpgsqlTypes.NpgsqlDbType.Uuid, (object?)input.CategoryId ?? DBNull.Value);
+        command.Parameters.AddWithValue("notes", NpgsqlTypes.NpgsqlDbType.Text,
+            (object?)input.Notes?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("version", input.Version);
         return await command.ExecuteNonQueryAsync(ct) == 1;
     }

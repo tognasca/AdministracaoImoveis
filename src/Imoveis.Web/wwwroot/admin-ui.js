@@ -5,7 +5,17 @@ let session = null;
 export function setSession(value) { session = value; }
 export function getSession() { return session; }
 export function adminNav() {
-  return '<nav class="admin-nav" aria-label="Painel administrativo">' + link('Meus imóveis', 'admin', true) + link('Novo imóvel', 'editar') + link('Importações', '/admin/importacoes', true) + (session?.administrator ? link('Usuários', 'usuarios', true) + link('Configurações', 'configuracoes', true) + link('Menu da vitrine', 'menu', true) : '') +
+  const [route,id] = location.hash.slice(1).split('?')[0].split('/');
+  const path = location.pathname.replace(/\/$/, '');
+  const current = route === 'editar' && id ? 'admin' :
+    route === 'importar' || (!route && path === '/admin/importacoes') ? '/admin/importacoes' :
+    route || 'admin';
+  const item = (label, target) => {
+    const selected = current === target;
+    const anchor = link(label, target, !selected);
+    return selected ? anchor.replace('<a ', '<a aria-current="page" ') : anchor;
+  };
+  return '<nav class="admin-nav" aria-label="Painel administrativo">' + item('Meus imóveis', 'admin') + item('Novo imóvel', 'editar') + item('Importações', '/admin/importacoes') + (session?.administrator ? item('Usuários', 'usuarios') + item('Configurações', 'configuracoes') + item('Menu da vitrine', 'menu') : '') +
     '<button class="alt" id="logout">Sair</button></nav>';
 }
 export function bindLogout() {

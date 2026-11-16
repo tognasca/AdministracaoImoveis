@@ -11,7 +11,7 @@ record SavedImportModel(string Signature, string Source, int MappedFields, DateT
 static class ImportEndpoints
 {
     private static readonly HashSet<string> Fields = [
-        "", "code", "title", "kind", "bedrooms", "district", "city", "location", "price", "size"
+        "", "code", "title", "kind", "bedrooms", "district", "city", "location", "price", "size", "notes"
     ];
 
     public static void Map(RouteGroupBuilder admin, Func<PropertyInput, string?> validate)
@@ -86,7 +86,7 @@ static class ImportEndpoints
                 || input.Codes.Any(code => string.IsNullOrWhiteSpace(code) || code.Length > 80))
                 return Results.BadRequest("Confira a origem e os códigos do arquivo.");
             await using var query = db.CreateCommand("""
-                SELECT id, code, title, kind, district, city, price, bedrooms, size, status, album, version
+                SELECT id, code, title, kind, district, city, price, bedrooms, size, status, album, version, notes
                 FROM properties
                 WHERE lower(source)=lower(@source) AND lower(code) IN (SELECT lower(code) FROM unnest(@codes) AS input(code))
                 """);
@@ -98,7 +98,7 @@ static class ImportEndpoints
                 result.Add(new(reader.GetGuid(0), new(reader.GetString(1), input.Source.Trim(), reader.GetString(2),
                     reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetDecimal(6),
                     reader.GetInt32(7), reader.GetDecimal(8), reader.GetString(9),
-                    reader.IsDBNull(10) ? null : reader.GetString(10), reader.GetInt32(11))));
+                    reader.IsDBNull(10) ? null : reader.GetString(10), reader.GetInt32(11), Notes: reader.IsDBNull(12) ? null : reader.GetString(12))));
             return Results.Ok(result);
         });
         group.MapPost("/confirmacao", async (ImportBatch input, NpgsqlDataSource db, CancellationToken ct) =>
@@ -121,7 +121,7 @@ static class ImportEndpoints
                     if (row.Id is { } id)
                     {
                         await using var current = new NpgsqlCommand("""
-                            SELECT code,status,album,category_id FROM properties
+                            SELECT code,status,album,category_id,notes FROM properties
                             WHERE id=@id AND version=@version AND lower(source)=lower(@source) FOR UPDATE
                             """, connection, transaction);
                         current.Parameters.AddWithValue("id", id);
@@ -132,7 +132,8 @@ static class ImportEndpoints
                             return Results.Conflict("Um imóvel mudou. Gere a prévia novamente antes de importar.");
                         data = data with { Code = reader.GetString(0), Status = reader.GetString(1),
                             Album = reader.IsDBNull(2) ? null : reader.GetString(2),
-                            CategoryId = reader.IsDBNull(3) ? null : reader.GetGuid(3) };
+                            CategoryId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                            Notes = string.IsNullOrWhiteSpace(data.Notes) ? (reader.IsDBNull(4) ? null : reader.GetString(4)) : data.Notes };
                     }
                     else data = data with { Status = "Rascunho", Album = null, Version = 0, CategoryId = null };
 
