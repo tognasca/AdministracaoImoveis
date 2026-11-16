@@ -3,7 +3,8 @@ import {mountImport} from './imports.js';
 import {app, escape, link, notice, report} from './ui.js';
 import {request} from './api.js';
 import {adminNav, bindLogout, login, setSession} from './admin-ui.js';
-import {listing, details} from './catalog.js';
+import {adminListing} from './catalog.js';
+import {storefront, details} from './storefront.js';
 import {editor} from './editor.js';
 import {staff} from './staff.js';
 
@@ -13,9 +14,12 @@ async function render() {
   const isCurrent = () => current === navigation;
   const [path,query] = location.hash.slice(1).split('?');
   const [route,id] = (path || (location.pathname.replace(/\/$/,'') === '/admin/importacoes' ? 'importar' : '')).split('/');
+  const adminRoute = ['admin','editar','importar','usuarios','configuracoes'].includes(route);
+  document.body.classList.toggle('estate-site', !adminRoute);
   app.innerHTML = '<p>Carregando…</p>';
+  window.scrollTo(0, 0);
   try {
-    if (['admin','editar','importar','usuarios','configuracoes'].includes(route)) {
+    if (adminRoute) {
       const currentSession = await request('/api/admin/session');
       if (!isCurrent()) return;
       setSession(currentSession);
@@ -29,11 +33,11 @@ async function render() {
     } else if (route === 'editar') {
       if (isCurrent()) await editor(id,isCurrent);
     } else if (route === 'admin') {
-      await listing(true,new URLSearchParams(query),isCurrent);
+      await adminListing(new URLSearchParams(query),isCurrent);
     } else if (route === 'imovel' && id) {
       await details(id,isCurrent);
     } else {
-      await listing(false,new URLSearchParams(query),isCurrent);
+      await storefront(new URLSearchParams(query),isCurrent);
     }
   } catch (error) {
     if (!isCurrent()) return;

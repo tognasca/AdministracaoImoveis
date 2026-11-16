@@ -53,25 +53,13 @@ label { display: grid; min-width: 0; gap: 5px; font-size: .88rem; font-weight: 6
 .admin-nav #logout { margin-left: auto; }
 .filter-bar { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(160px,100%),1fr)); gap: 12px; align-items: end; }
 .filter-bar button { justify-self: start; min-height: 42px; }
-.hero {
-  position: relative; isolation: isolate; overflow: hidden; border-radius: 15px; margin-bottom: 20px;
-  min-height: clamp(190px, 28vw, 320px); display: grid; align-items: center;
-  color: white; background: linear-gradient(125deg,#0a2e20,#20533b);
-}
-.hero-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
-.hero::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg,#081f19e8,#081f1970); z-index: -1; }
-.hero-content { padding: clamp(20px, 5vw, 54px); max-width: 680px; }
-.hero p { margin-bottom: 0; }
 .property-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill,minmax(min(245px,100%),1fr)); }
 .property-card { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 13px; }
 .property-card .btn { margin-top: auto; }
 .photo { display: block; width: 100%; height: clamp(146px, 20vw, 182px); object-fit: cover; border-radius: 8px; margin-bottom: 12px; }
 .property-card .notice { width: 100%; display: grid; place-items: center; min-height: 146px; }
-.detail-title { margin-top: 18px; }
-.property-detail { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; gap: 18px; }
-.property-detail section > .photo { height: clamp(190px, 32vw, 380px); object-fit: contain; background: var(--quiet); }
-.detail-thumbs, .thumb-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(150px,100%),1fr)); gap: 12px; }
-.detail-thumbs .photo, .thumb-card .photo { height: 110px; }
+.thumb-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(150px,100%),1fr)); gap: 12px; }
+.thumb-card .photo { height: 110px; }
 .thumb-card { padding: 8px; margin: 0 0 8px; min-width: 0; }
 .thumb-card .row { margin: 0; gap: 6px; }
 .thumb-card button { min-height: 34px; padding: 5px 8px; }
@@ -89,7 +77,6 @@ td input,td select { min-width: 140px; }
 #banner-form, #login { max-width: 560px; }
 #feedback:empty { display: none; }
 @media (max-width: 675px) {
-  .property-detail { grid-template-columns: minmax(0, 1fr); }
   .admin-nav #logout { margin-left: 0; }
   .filter-bar { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .filter-bar label:first-child { grid-column: 1/-1; }
