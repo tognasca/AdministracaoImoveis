@@ -226,7 +226,7 @@ export function mountImport(ui) {
         const result = await request(endpoint+'/confirmacao','POST',{
           source,filename:fileName,originalFile:btoa(binary),rows:valid.map(({id,data}) => ({id,data}))
         });
-        if (isCurrent()) { choose(); report(result.count+' imóveis gravados. Os novos cadastros estão em rascunho.'); }
+        if (isCurrent()) { choose(); report(result.count+' imóveis gravados. Os novos cadastros ficam em rascunho. Para exibi-los na vitrine, abra Meus imóveis e use Salvar e publicar no cadastro.'); }
       }
       catch (error) { if (isCurrent()) report(error.message); button.disabled = false; }
     };

@@ -8,6 +8,7 @@ export async function listing(admin, params, isCurrent) {
   const route = admin ? 'admin' : 'vitrine';
   const filters = Object.fromEntries(['kind','maxPrice','bedrooms'].map(key => [key,params.get(key) ?? '']));
   const query = next => new URLSearchParams({...filters,q,page:next});
+  const filtered = q || Object.values(filters).some(Boolean);
   for (const [key,value] of Object.entries(filters)) if (!value) delete filters[key];
   const [data, settings] = await Promise.all([
     request((admin ? root : '/api/imoveis') + '?' + query(page)),
@@ -28,8 +29,11 @@ export async function listing(admin, params, isCurrent) {
       escape(home.data.district) + ' · ' + escape(home.data.city) + '</p><h3>' + escape(home.data.title) +
       '</h3><p class="price">' + money(home.data.price) + '</p>' +
       (admin ? '<p>' + escape(home.data.code) + ' · ' + escape(home.data.status) + ' · ' + home.photos.length + '/5 fotos</p>' : '') +
-      link(admin ? 'Editar cadastro' : 'Ver imóvel', (admin ? 'editar/' : 'imovel/') + home.id) + '</article>').join('') ||
-      '<p>' + (q ? 'Nenhum imóvel corresponde à busca.' : 'Nenhum imóvel cadastrado para exibir.') + '</p>') +
+      link(admin ? 'Editar cadastro' : 'Ver imóvel', (admin ? 'editar/' : 'imovel/') + home.id) +
+      (admin && home.data.status === 'Publicado' ? ' ' + link('Ver na vitrine', 'imovel/' + home.id, true) : '') +
+      '</article>').join('') ||
+      '<p>' + (filtered ? 'Nenhum imóvel corresponde aos filtros.' :
+        admin ? 'Nenhum imóvel cadastrado.' : 'Nenhum imóvel publicado na vitrine.') + '</p>') +
     '</div><div class="row">' + (page > 1 ? link('Página anterior', route + '?' + query(page-1), true) : '') +
     (data.length === 30 ? link('Próxima página', route + '?' + query(page+1), true) : '') + '</div>';
   document.querySelector('#search').onsubmit = event => {

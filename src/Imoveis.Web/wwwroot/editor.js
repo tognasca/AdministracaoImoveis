@@ -1,4 +1,4 @@
-import {app, root, escape, notice, report} from './ui.js';
+import {app, root, escape, link, notice, report} from './ui.js';
 import {request} from './api.js';
 import {adminNav, bindLogout} from './admin-ui.js';
 import {mountGallery} from './gallery.js';
@@ -13,6 +13,9 @@ export async function editor(id, isCurrent) {
   const home = id ? await request(root + '/' + encodeURIComponent(id)) : null;
   if (!isCurrent()) return;
   const d = home?.data ?? {status:'Rascunho', source:'Cadastro manual'};
+  const visibility = status => status === 'Publicado'
+    ? 'Publicado na vitrine. ' + link('Ver anúncio', 'imovel/' + id, true)
+    : 'Este imóvel está fora da vitrine. Para publicar, preencha cidade, tipo e preço.';
   const sections = [
     ['Identificação e localização', ['code','source','title','kind','district','city']],
     ['Características e preço', ['price','bedrooms','size']],
@@ -28,24 +31,36 @@ export async function editor(id, isCurrent) {
   app.innerHTML = adminNav() + '<h2>' + (id ? 'Editar imóvel' : 'Novo imóvel') + '</h2>' + notice +
     '<form id="editor">' + sections.map(([title, keys]) => '<section class="box"><h3>' + title +
       '</h3><div class="grid">' + fields.filter(([key]) => keys.includes(key)).map(field).join('') +
-      (title === 'Publicação' ? statusField : '') + '</div></section>').join('') +
-    '<button>Salvar imóvel</button></form><p></p>' +
+      (title === 'Publicação' ? statusField : '') + '</div>' +
+      (title === 'Publicação' ? '<p id="visibility">' + visibility(d.status) + '</p>' : '') + '</section>').join('') +
+    '<div class="row"><button>Salvar imóvel</button><button type="submit" value="publish" id="publish"' +
+    (d.status === 'Publicado' ? ' hidden' : '') + '>Salvar e publicar</button></div></form><p></p>' +
     (home ? '<section class="box" id="gallery"></section>' : '<p>Salve o cadastro para adicionar as fotos.</p>');
   bindLogout();
   document.querySelector('#editor').onsubmit = async event => {
     event.preventDefault();
-    const button = event.target.querySelector('button');
+    const form = event.currentTarget;
+    const publish = form.querySelector('#publish');
+    const buttons = form.querySelectorAll('button');
     const data = Object.fromEntries(new FormData(event.target));
+    if (event.submitter === publish) data.status = 'Publicado';
     for (const key of ['price','bedrooms','size']) data[key] = Number(data[key]);
     data.version = d.version ?? 0;
-    button.disabled = true;
+    buttons.forEach(button => { button.disabled = true; });
     try {
       const created = await request(id ? root + '/' + id : root, id ? 'PUT' : 'POST', data);
+      if (!isCurrent()) return;
       if (created) location.hash = 'editar/' + created.id;
-      else { d.version++; report('Imóvel salvo.'); }
+      else {
+        d.version++;
+        form.elements.status.value = data.status;
+        publish.hidden = data.status === 'Publicado';
+        form.querySelector('#visibility').innerHTML = visibility(data.status);
+        report(data.status === 'Publicado' ? 'Imóvel publicado na vitrine.' : 'Imóvel salvo.');
+      }
     }
-    catch (error) { report(error.message); }
-    finally { button.disabled = false; }
+    catch (error) { if (isCurrent()) report(error.message); }
+    finally { buttons.forEach(button => { button.disabled = false; }); }
   };
   if (home) mountGallery(home);
 }

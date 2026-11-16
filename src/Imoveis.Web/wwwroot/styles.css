@@ -31,6 +31,7 @@ button, .btn {
 }
 button:hover, .btn:hover { filter: brightness(.92); }
 button.alt, .btn.alt { background: white; color: var(--forest); border-color: #c9d8cc; }
+#publish[hidden] { display: none; }
 button:disabled { opacity: .5; cursor: default; }
 :focus-visible { outline: 3px solid #497d5f; outline-offset: 3px; }
 input, select, textarea {

@@ -26,7 +26,9 @@ const code = 'VALIDACAO-'+Date.now();
 const data = {code,source:'Teste de integração',title:'Imóvel de teste '+code,kind:'Casa',district:'Centro',city:'Cotia',
   price:550000,bedrooms:2,size:95,status:'Rascunho',album:'https://example.com/album',version:0};
 const {id} = await call(admin,'POST',data,201);
+const storefront = '/api/imoveis?q=' + encodeURIComponent(code);
 try {
+  assert.deepEqual(await call(storefront), []);
   await call('/api/imoveis/'+id,'GET',undefined,404);
   const upload = () => {
     const form = new FormData();
@@ -41,6 +43,7 @@ try {
   await call(admin+'/'+id+'/fotos/'+home.photos[4]+'/capa','PUT',undefined,204);
   home = await call(admin+'/'+id);
   await call(admin+'/'+id,'PUT',{...home.data,status:'Publicado'},204);
+  assert((await call(storefront)).some(item => item.id === id));
   const endpoint = '/api/admin/importacoes';
   const [row] = await call(endpoint+'/conferencia','POST',{source:data.source,codes:[data.code]});
   const signature = 'a'.repeat(64);
@@ -49,6 +52,7 @@ try {
   await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',originalFile:original.toString('base64'),
     rows:[{...row,data:{...row.data,price:540000}}]});
   const published = await call('/api/imoveis/'+id);
+  assert((await call(storefront)).some(item => item.id === id && item.data.price === 540000));
   assert.equal(published.data.price,540000);
   assert.equal(published.data.album,data.album);
   assert.deepEqual(published.photos,home.photos);
@@ -72,5 +76,6 @@ try {
   await call(admin+'/'+id,'PUT',{...home.data,status:'Retirado'},204);
   for (const photo of home.photos) await call(admin+'/'+id+'/fotos/'+photo,'DELETE',undefined,204);
   await call('/api/imoveis/'+id,'GET',undefined,404);
+  assert.deepEqual(await call(storefront), []);
 }
 console.log('Integração verificada: cadastro, acesso restrito, galeria, publicação, importação e retirada.');
