@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+
+const base = process.env.IMOVEIS_URL ?? 'http://localhost:5086';
+const password = process.env.IMOVEIS_ADMIN_PASSWORD;
+if (!password) throw Error('Configure IMOVEIS_ADMIN_PASSWORD para executar o teste.');
+let cookie;
+async function call(path, method = 'GET', body, expected = 200) {
+  const headers = {'X-Imoveis-Action':'1'};
+  if (cookie) headers.Cookie = cookie;
+  if (body && !(body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(body);
+  }
+  const response = await fetch(base + path, {method,body,headers});
+  if (response.status !== expected) assert.fail(path+' → esperado '+expected+', recebido '+response.status+': '+await response.text());
+  const candidate = response.headers.get('set-cookie');
+  if (candidate) cookie = candidate.split(';')[0];
+  return response.headers.get('content-type')?.includes('application/json') ? await response.json() : response;
+}
+const admin = '/api/admin/imoveis';
+await call('/health');
+await call(admin,'GET',undefined,401);
+await call('/api/admin/login','POST',{username:'admin',password},204);
+const code = 'VALIDACAO-'+Date.now();
+const data = {code,source:'Teste de integração',title:'Imóvel de teste '+code,kind:'Casa',district:'Centro',city:'Cotia',
+  price:550000,bedrooms:2,size:95,status:'Rascunho',album:'https://example.com/album',version:0};
+const {id} = await call(admin,'POST',data,201);
+try {
+  await call('/api/imoveis/'+id,'GET',undefined,404);
+  const upload = () => {
+    const form = new FormData();
+    const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7+jfcAAAAASUVORK5CYII=', 'base64');
+    form.append('photo',new Blob([pixel],{type:'image/png'}),'foto.png');
+    return form;
+  };
+  for (let i=0; i<5; i++) await call(admin+'/'+id+'/fotos','POST',upload(),201);
+  await call(admin+'/'+id+'/fotos','POST',upload(),409);
+  let home = await call(admin+'/'+id);
+  assert.equal(home.photos.length,5);
+  await call(admin+'/'+id+'/fotos/'+home.photos[4]+'/capa','PUT',undefined,204);
+  home = await call(admin+'/'+id);
+  await call(admin+'/'+id,'PUT',{...home.data,status:'Publicado'},204);
+  const endpoint = '/api/admin/importacoes';
+  const [row] = await call(endpoint+'/conferencia','POST',{source:data.source,codes:[data.code]});
+  await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',
+    rows:[{...row,data:{...row.data,price:540000}}]});
+  const published = await call('/api/imoveis/'+id);
+  assert.equal(published.data.price,540000);
+  assert.equal(published.data.album,data.album);
+  assert.deepEqual(published.photos,home.photos);
+  assert.equal(published.data.status,'Publicado');
+  await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',rows:[row]},409);
+  await call('/media/'+id+'/'+published.photos[0]);
+  assert((await call(endpoint+'/historico')).some(item=>item.filename==='validacao.csv'));
+} finally {
+  const home = await call(admin+'/'+id);
+  await call(admin+'/'+id,'PUT',{...home.data,status:'Retirado'},204);
+  for (const photo of home.photos) await call(admin+'/'+id+'/fotos/'+photo,'DELETE',undefined,204);
+  await call('/api/imoveis/'+id,'GET',undefined,404);
+}
+console.log('Integração verificada: cadastro, acesso restrito, galeria, publicação, importação e retirada.');

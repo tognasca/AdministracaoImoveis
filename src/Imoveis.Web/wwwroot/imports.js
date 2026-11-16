@@ -1,0 +1,199 @@
+import {delimited, excel} from './import-files.js';
+
+const endpoint = '/api/admin/importacoes';
+const labels = {code:'Código do imóvel',title:'Título',kind:'Tipo de imóvel',bedrooms:'Dormitórios',
+  district:'Bairro',city:'Cidade',location:'Bairro e cidade',price:'Preço',size:'Área (m²)'};
+const aliases = {code:['codigo','cod','id','codigoimovel'],title:['titulo','nome','descricao'],
+  kind:['ctipo','tipoimovel','tipo'],bedrooms:['dormitorio','dormitorios','dormitoriosquanto','quartos'],
+  district:['bairro'],city:['cidade','municipio'],location:['local','localizacao'],
+  price:['valor','preco','vlvenda','precovenda'],size:['area','aream2','metragem']};
+const normalize = value => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .toLowerCase().replace(/[^a-z0-9]/g,'');
+const codeKey = value => String(value ?? '').trim().toLowerCase();
+const emptyData = {title:'',kind:'',district:'',city:'',price:0,bedrooms:0,size:0,status:'Rascunho',version:0};
+const example = 'CODIGO;CTIPO;Dormitórios quanto;Local;VL_VENDA;Título\r\nIM-104;CASA;03;Granja Viana - Cotia/SP;875000;Casa na Granja Viana\r\nIM-105;APTO;02;Centro - Cotia/SP;380000;Apartamento no Centro';
+function download(name, content) {
+  const url = URL.createObjectURL(new Blob(['\ufeff',content], {type:'text/csv;charset=utf-8'}));
+  const a = Object.assign(document.createElement('a'), {href:url,download:name});
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url),1000);
+}
+function csvCell(value) {
+  let text = String(value ?? '');
+  if (/^\s*[=+@-]|^[\t\r\n]/.test(text)) text = "'" + text;
+  return '"' + text.replaceAll('"','""') + '"';
+}
+export function prepare(rows,mapping,existing,source) {
+  const byCode = new Map(existing.map(row => [codeKey(row.data.code),row]));
+  const counts = new Map();
+  const codeIndex = mapping.indexOf('code');
+  for (const row of rows) {
+    const key = codeKey(row[codeIndex]);
+    if (key) counts.set(key,(counts.get(key) ?? 0)+1);
+  }
+  return rows.map((cells,index) => {
+    const patch = {};
+    const errors = [];
+    mapping.forEach((field,i) => {
+      let value = String(cells[i] ?? '').trim();
+      if (!field || !value) return;
+      if (field === 'location') {
+        const match = value.match(/^(.+?)\s+-\s+([^/]+)(?:\/\s*[A-Z]{2})?$/i);
+        patch.district ??= (match?.[1] ?? value).trim();
+        if (match) patch.city ??= match[2].trim();
+        return;
+      }
+      if (field === 'kind') value = ({apto:'Apartamento',apartamento:'Apartamento',casa:'Casa',
+        terreno:'Terreno',sobrado:'Sobrado'})[normalize(value)] ?? value;
+      if (field === 'bedrooms') {
+        if (!/^\d+(?:\s*(?:quartos?|dormitórios?))?$/i.test(value) || parseInt(value,10) > 1000)
+          errors.push('Quantidade de dormitórios inválida');
+        value = parseInt(value,10);
+      }
+      if (field === 'price' || field === 'size') {
+        value = value.replace(/R\$|\s/g,'');
+        if (!/^\d+(?:\.\d+)?$/.test(value) && !/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d{1,2}$/.test(value))
+          errors.push(labels[field]+' inválido');
+        if (value.includes(',')) value = value.replaceAll('.','').replace(',','.');
+        value = Number(value);
+        if (value >= (field === 'price' ? 1e13 : 1e10)) errors.push(labels[field]+' acima do limite');
+      }
+      patch[field] = value;
+    });
+    const key = codeKey(patch.code);
+    if (!key) errors.push('Código ausente');
+    if ((counts.get(key) ?? 0) > 1) errors.push('Código repetido no arquivo');
+    const prior = byCode.get(key);
+    const data = {...emptyData,...prior?.data,...patch,source};
+    if (prior) data.code = prior.data.code;
+    if (!data.title) data.title = [data.kind || 'Imóvel', data.district && 'em '+data.district,data.code].filter(Boolean).join(' ');
+    for (const [field,limit] of Object.entries({code:80,title:160,kind:80,district:100,city:100}))
+      if ((data[field]?.length ?? 0) > limit) errors.push(labels[field]+' acima de '+limit+' caracteres');
+    const changes = prior ? Object.keys(patch).filter(field => field !== 'code' &&
+      String(prior.data[field] ?? '') !== String(data[field] ?? '')) : [];
+    return {line:index+2,id:prior?.id ?? null,data,
+      status:errors.length ? 'Revisar' : prior ? changes.length ? 'Atualizar' : 'Sem alteração' : 'Criar',
+      note:errors.join(' · ') || (prior ? changes.map(field => labels[field]+': '+prior.data[field]+' → '+data[field]).join(' · ') : data.title)};
+  });
+}
+export function mountImport(ui) {
+  const {app,request,escape,notice,report,adminNav,bindLogout,isCurrent} = ui;
+  let rows = [], fileName = '', mapping = [], source = '', signature = '', models = [], lookupText = '';
+  const start = stage => {
+    app.innerHTML = adminNav()+'<h2>Importar imóveis</h2><p class="muted">'+stage+' de 3 · Arquivo → Mapeamento → Conferência</p>'+notice;
+    bindLogout();
+  };
+  const choose = () => {
+    start(1);
+    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV ou TXT delimitado. No Excel, será usada a primeira aba.</p>'+
+      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt"></label>'+
+      '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
+    const history = app.querySelector('#history');
+    request(endpoint+'/historico').then(items => {
+      history.innerHTML = '<h3>Últimas importações</h3>' + (items.map(item => '<p>'+escape(item.filename)+
+        ' · '+escape(item.source)+' · '+item.count+' registros · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+'</p>').join('') ||
+        '<p>Nenhum arquivo importado.</p>');
+    }).catch(() => { history.innerHTML = '<h3>Últimas importações</h3><p>Não foi possível consultar o histórico.</p>'; });
+    app.querySelector('#example').onclick = () => download('imoveis-exemplo.csv',example);
+    app.querySelector('#import-file').onchange = async event => {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        event.target.disabled = true;
+        if (file.size > 8e6) throw Error('Selecione um arquivo de até 8 MB.');
+        rows = /\.xlsx$/i.test(file.name) ? await excel(file) : delimited(await file.text());
+        if (rows.length < 2 || rows[0].length < 1) throw Error('Inclua o cabeçalho e ao menos uma linha de dados.');
+        if (rows.length > 5001 || rows[0].length > 100) throw Error('Use até 5.000 registros e 100 colunas por arquivo.');
+        fileName = file.name;
+        const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(Array.from(rows[0],normalize))));
+        signature = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('');
+        models = await request(endpoint+'/modelos/'+signature);
+        mapping = Array.from(rows[0],col => Object.keys(aliases).find(k => aliases[k].includes(normalize(col))) ?? '');
+        source = '';
+        if (models.length === 1 && models[0].mapping.length === mapping.length) {
+          mapping = models[0].mapping;
+          source = models[0].source;
+        }
+        if (isCurrent()) map();
+      } catch (error) {
+        if (isCurrent()) report(error.message);
+        event.target.disabled = false;
+        event.target.value = '';
+      }
+    };
+  };
+  const map = () => {
+    start(2);
+    const options = Object.entries(labels);
+    app.insertAdjacentHTML('beforeend','<form id="mapping"><div class="box"><h3>'+escape(fileName)+'</h3>'+
+      '<label>Origem dos códigos<input required maxlength="100" name="source" value="'+escape(source)+'"></label>'+
+      (models.length ? '<p></p><label>Modelo salvo<select id="models"><option value="">Selecionar modelo</option>'+
+        models.map((model,index) => '<option value="'+index+'">'+escape(model.source)+'</option>').join('')+'</select></label>' : '')+
+      '</div><div class="box table"><table><thead><tr><th>Coluna do arquivo</th><th>Exemplo</th><th>Campo do sistema</th></tr></thead><tbody>'+
+      Array.from(rows[0],(column,index) => '<tr><td>'+escape(column || 'Coluna '+(index+1))+'</td><td>'+
+        escape(rows.slice(1).find(row => row[index])?.[index])+'</td><td><select name="column'+index+'" aria-label="'+escape(column || 'Coluna '+(index+1))+'">'+
+        '<option value="">Ignorar</option>'+options.map(([key,name]) => '<option value="'+key+'"'+
+        (mapping[index]===key?' selected':'')+'>'+name+'</option>').join('')+'</select></td></tr>').join('')+
+      '</tbody></table></div><label style="display:flex;align-items:center"><input style="width:auto" type="checkbox" name="save" checked> Salvar mapeamento nesta origem</label>'+
+      '<p></p><button type="button" class="alt" id="choose">Trocar arquivo</button> <button id="review">Revisar importação</button></form>');
+    app.querySelector('#choose').onclick = choose;
+    const select = app.querySelector('#models');
+    if (select) select.onchange = () => {
+      if (!select.value) return;
+      const model = models[Number(select.value)];
+      if (model.mapping.length !== mapping.length) return;
+      mapping = model.mapping;
+      source = model.source;
+      map();
+    };
+    app.querySelector('#mapping').onsubmit = async event => {
+      event.preventDefault();
+      const form = new FormData(event.target);
+      source = form.get('source').trim();
+      mapping = mapping.map((_,i) => form.get('column'+i));
+      const mapped = mapping.filter(Boolean);
+      if (!source || !mapped.includes('code') || new Set(mapped).size !== mapped.length) {
+        report('Informe a origem e mapeie o código. Use cada destino uma vez.');
+        return;
+      }
+      const button = app.querySelector('#review');
+      button.disabled = true;
+      try {
+        const codeIndex = mapping.indexOf('code');
+        const codes = [...new Set(rows.slice(1).map(row => String(row[codeIndex] ?? '').trim()).filter(code => code.length && code.length <= 80))];
+        const existing = await request(endpoint+'/conferencia','POST',{source,codes});
+        if (form.has('save')) await request(endpoint+'/modelos/'+signature,'PUT',{source,mapping});
+        lookupText = 'Origem '+source+' · '+fileName;
+        if (isCurrent()) review(prepare(rows.slice(1),mapping,existing,source));
+      } catch (error) { if (isCurrent()) report(error.message); }
+      finally { button.disabled = false; }
+    };
+  };
+  const review = preview => {
+    start(3);
+    const valid = preview.filter(row => row.status === 'Criar' || row.status === 'Atualizar');
+    const rejected = preview.filter(row => row.status === 'Revisar');
+    app.insertAdjacentHTML('beforeend','<p>'+escape(lookupText)+'</p><div class="row">'+
+      ['Criar','Atualizar','Sem alteração','Revisar'].map(status => '<span class="chips">'+status+' · '+
+        preview.filter(row => row.status === status).length+'</span>').join('')+
+      '</div><div class="box table"><table><thead><tr><th>Registro</th><th>Código</th><th>Resultado</th><th>Detalhes</th></tr></thead><tbody>'+
+      preview.map(row => '<tr><td>'+row.line+'</td><td>'+escape(row.data.code)+'</td><td>'+row.status+'</td><td>'+escape(row.note)+'</td></tr>').join('')+
+      '</tbody></table></div><div class="row"><button class="alt" id="map">Voltar ao mapeamento</button>'+
+      (rejected.length ? '<button class="alt" id="errors">Baixar rejeitados</button>' : '')+
+      '<button id="confirm"'+(valid.length ? '' : ' disabled')+'>Importar '+valid.length+' imóveis</button></div>');
+    app.querySelector('#map').onclick = map;
+    const errors = app.querySelector('#errors');
+    if (errors) errors.onclick = () => download('imoveis-rejeitados.csv','Registro;Código;Motivo\r\n'+
+      rejected.map(row => [row.line,row.data.code,row.note].map(csvCell).join(';')).join('\r\n'));
+    app.querySelector('#confirm').onclick = async event => {
+      const button = event.target;
+      button.disabled = true;
+      try {
+        const result = await request(endpoint+'/confirmacao','POST',{source,filename:fileName,rows:valid.map(({id,data}) => ({id,data}))});
+        if (isCurrent()) { choose(); report(result.count+' imóveis gravados. Os novos cadastros estão em rascunho.'); }
+      }
+      catch (error) { if (isCurrent()) report(error.message); button.disabled = false; }
+    };
+  };
+  choose();
+}

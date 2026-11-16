@@ -1,0 +1,5 @@
+.env
+midia
+**/bin
+**/obj
+.git
