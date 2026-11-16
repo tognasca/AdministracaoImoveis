@@ -9,18 +9,22 @@ export async function listing(admin, params, isCurrent) {
   const filters = Object.fromEntries(['kind','maxPrice','bedrooms'].map(key => [key,params.get(key) ?? '']));
   const query = next => new URLSearchParams({...filters,q,page:next});
   for (const [key,value] of Object.entries(filters)) if (!value) delete filters[key];
-  const data = await request((admin ? root : '/api/imoveis') + '?' + query(page));
+  const [data, settings] = await Promise.all([
+    request((admin ? root : '/api/imoveis') + '?' + query(page)),
+    admin ? null : request('/api/vitrine/configuracao')
+  ]);
   if (!isCurrent()) return;
   app.innerHTML = (admin ? adminNav() + '<h2>Gestão de imóveis</h2>' :
-    '<section class="hero"><h1>Encontre seu próximo imóvel</h1><p>Consulte os imóveis disponíveis para venda.</p></section>') +
+    '<section class="hero">'+(settings?.banner ? '<img class="hero-image" src="'+escape(settings.banner)+'" alt="" fetchpriority="high">' : '')+
+    '<div class="hero-content"><h1>Encontre seu próximo imóvel</h1><p>Consulte os imóveis disponíveis para venda.</p></div></section>') +
     (admin ? '<section class="box"><h3>Importar imóveis</h3><p>Envie um arquivo Excel, CSV ou TXT e confira os dados antes de gravar.</p>' + link('Importar arquivo', '/admin/importacoes') + '</section>' : '') +
-    notice + '<form class="row" id="search"><label>Cidade, bairro, título ou código<input name="q" maxlength="120" value="' +
+    notice + '<form class="box filter-bar" id="search"><label>Cidade, bairro, título ou código<input name="q" maxlength="120" value="' +
     escape(q) + '"></label>' + (admin ? '' :
       '<label>Tipo<input name="kind" maxlength="80" value="'+escape(filters.kind)+'" placeholder="Ex.: Casa"></label>'+
       '<label>Preço máximo (R$)<input name="maxPrice" type="number" min="0" step="0.01" value="'+escape(filters.maxPrice)+'"></label>'+
       '<label>Mínimo de dormitórios<input name="bedrooms" type="number" min="0" max="1000" value="'+escape(filters.bedrooms)+'"></label>') +
-    '<button>Buscar</button></form><div class="grid">' +
-    (data.map(home => '<article>' + picture(home, home.photos[0]) + '<p class="muted">' +
+    '<button>Buscar</button></form><div class="property-grid">' +
+    (data.map(home => '<article class="property-card">' + picture(home, home.photos[0]) + '<p class="muted">' +
       escape(home.data.district) + ' · ' + escape(home.data.city) + '</p><h3>' + escape(home.data.title) +
       '</h3><p class="price">' + money(home.data.price) + '</p>' +
       (admin ? '<p>' + escape(home.data.code) + ' · ' + escape(home.data.status) + ' · ' + home.photos.length + '/5 fotos</p>' : '') +
@@ -41,9 +45,9 @@ export async function details(id, isCurrent) {
   ]);
   if (!isCurrent()) return;
   const d = home.data;
-  app.innerHTML = link('Voltar à vitrine','vitrine',true) + '<p></p><h2>' + escape(d.title) +
-    '</h2><p>' + escape(d.district) + ' · ' + escape(d.city) + '</p><div class="grid"><section>' +
-    picture(home,home.photos[0]) + '<div class="grid">' + home.photos.slice(1).map(p => picture(home,p)).join('') +
+  app.innerHTML = link('Voltar à vitrine','vitrine',true) + '<h2 class="detail-title">' + escape(d.title) +
+    '</h2><p>' + escape(d.district) + ' · ' + escape(d.city) + '</p><div class="property-detail"><section>' +
+    picture(home,home.photos[0]) + '<div class="detail-thumbs">' + home.photos.slice(1).map(p => picture(home,p)).join('') +
     '</div></section><article><p class="price">' + money(d.price) + '</p><p>' + escape(d.kind) +
     '</p><p>' + d.bedrooms + ' dormitórios · ' + d.size + ' m²</p>' +
     (d.album && /^https?:\/\//i.test(d.album) ? '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="' +

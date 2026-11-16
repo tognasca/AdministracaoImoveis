@@ -114,7 +114,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         return await command.ExecuteScalarAsync(ct) is not null;
     }
 
-    private static string? Detect(ReadOnlySpan<byte> header)
+    internal static string? Detect(ReadOnlySpan<byte> header)
     {
         if (header[..3].SequenceEqual(new byte[] { 255, 216, 255 })) return "image/jpeg";
         if (header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 })) return "image/png";

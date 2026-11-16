@@ -50,6 +50,8 @@ No painel, clique em **Importar arquivo** ou acesse http://localhost:5086/admin/
 
 O administrador cadastra operadores na tela **Usuários**. Operadores gerenciam imóveis e importações. Apenas administradores gerenciam contas.
 
+No painel, abra **Configurações → Imagem do banner principal** para enviar, substituir ou remover a foto da vitrine. A imagem fica na pasta de mídia, junto com as fotos dos imóveis, e faz parte do mesmo backup.
+
 Defina VITRINE_WHATSAPP no .env para exibir o botão de contato nos anúncios.
 
 ## Teste de integração

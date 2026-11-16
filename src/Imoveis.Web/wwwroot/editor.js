@@ -13,15 +13,23 @@ export async function editor(id, isCurrent) {
   const home = id ? await request(root + '/' + encodeURIComponent(id)) : null;
   if (!isCurrent()) return;
   const d = home?.data ?? {status:'Rascunho', source:'Cadastro manual'};
+  const sections = [
+    ['Identificação e localização', ['code','source','title','kind','district','city']],
+    ['Características e preço', ['price','bedrooms','size']],
+    ['Publicação', ['album']]
+  ];
+  const statusField = '<label>Status<select name="status">' + statuses.map(status =>
+    '<option' + (status === d.status ? ' selected' : '') + '>' + status + '</option>').join('') + '</select></label>';
+  const field = ([key,label,length]) =>
+    '<label>' + label + '<input name="' + key + '" value="' + escape(d[key]) + '" ' +
+    (length ? 'maxlength="' + length + '" type="' + (key === 'album' ? 'url' : 'text') + '"' :
+      'type="number" min="0" step="' + (key === 'bedrooms' ? '1' : '0.01') + '"') +
+    (['code','source','title'].includes(key) ? ' required' : '') + '></label>';
   app.innerHTML = adminNav() + '<h2>' + (id ? 'Editar imóvel' : 'Novo imóvel') + '</h2>' + notice +
-    '<form id="editor"><div class="box grid">' + fields.map(([key,label,length]) =>
-      '<label>' + label + '<input name="' + key + '" value="' + escape(d[key]) + '" ' +
-      (length ? 'maxlength="' + length + '" type="' + (key === 'album' ? 'url' : 'text') + '"' :
-        'type="number" min="0" step="' + (key === 'bedrooms' ? '1' : '0.01') + '"') +
-      (['code','source','title'].includes(key) ? ' required' : '') + '></label>').join('') +
-    '<label>Status<select name="status">' + statuses.map(status =>
-      '<option' + (status === d.status ? ' selected' : '') + '>' + status + '</option>').join('') +
-    '</select></label></div><button>Salvar imóvel</button></form><p></p>' +
+    '<form id="editor">' + sections.map(([title, keys]) => '<section class="box"><h3>' + title +
+      '</h3><div class="grid">' + fields.filter(([key]) => keys.includes(key)).map(field).join('') +
+      (title === 'Publicação' ? statusField : '') + '</div></section>').join('') +
+    '<button>Salvar imóvel</button></form><p></p>' +
     (home ? '<section class="box" id="gallery"></section>' : '<p>Salve o cadastro para adicionar as fotos.</p>');
   bindLogout();
   document.querySelector('#editor').onsubmit = async event => {

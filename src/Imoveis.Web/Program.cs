@@ -10,6 +10,7 @@ SessionEndpoints.Map(app, admin);
 StaffEndpoints.Map(admin);
 PropertyEndpoints.Map(admin);
 MediaEndpoints.Map(admin);
+BannerEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);
 app.MapFallbackToFile("/admin/importacoes", "index.html", WebStartup.StaticAssets());
 

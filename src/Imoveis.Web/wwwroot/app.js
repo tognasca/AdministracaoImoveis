@@ -1,3 +1,4 @@
+import {showSettings} from './settings.js';
 import {mountImport} from './imports.js';
 import {app, escape, link, notice, report} from './ui.js';
 import {request} from './api.js';
@@ -14,12 +15,14 @@ async function render() {
   const [route,id] = (path || (location.pathname.replace(/\/$/,'') === '/admin/importacoes' ? 'importar' : '')).split('/');
   app.innerHTML = '<p>Carregando…</p>';
   try {
-    if (['admin','editar','importar','usuarios'].includes(route)) {
+    if (['admin','editar','importar','usuarios','configuracoes'].includes(route)) {
       const currentSession = await request('/api/admin/session');
       if (!isCurrent()) return;
       setSession(currentSession);
     }
-    if (route === 'usuarios') {
+    if (route === 'configuracoes') {
+      await showSettings(isCurrent);
+    } else if (route === 'usuarios') {
       await staff(isCurrent);
     } else if (route === 'importar') {
       if (isCurrent()) mountImport({app,request,escape,notice,report,adminNav,bindLogout,isCurrent});

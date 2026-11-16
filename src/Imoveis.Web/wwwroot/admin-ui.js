@@ -5,8 +5,8 @@ let session = null;
 export function setSession(value) { session = value; }
 export function getSession() { return session; }
 export function adminNav() {
-  return '<div class="row">' + link('Meus imóveis', 'admin', true) + link('Novo imóvel', 'editar') + link('Importações', '/admin/importacoes', true) + (session?.administrator ? link('Usuários', 'usuarios', true) : '') +
-    '<button class="alt" id="logout">Sair</button></div>';
+  return '<nav class="admin-nav" aria-label="Painel administrativo">' + link('Meus imóveis', 'admin', true) + link('Novo imóvel', 'editar') + link('Importações', '/admin/importacoes', true) + (session?.administrator ? link('Usuários', 'usuarios', true) + link('Configurações', 'configuracoes', true) : '') +
+    '<button class="alt" id="logout">Sair</button></nav>';
 }
 export function bindLogout() {
   document.querySelector('#logout').onclick = async () => {
