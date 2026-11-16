@@ -15,22 +15,22 @@ const facts = data => [
   data.bedrooms > 0 ? data.bedrooms + (data.bedrooms === 1 ? ' dormitório' : ' dormitórios') : '',
   data.size > 0 ? Number(data.size).toLocaleString('pt-BR') + ' m²' : ''
 ].filter(Boolean);
-const media = (home, photo, className, eager = false) => photo
-  ? '<img class="' + className + '" src="' + escape(photoUrl(home.id, photo)) +
-    '" alt="' + escape(home.data.title) + '" loading="' + (eager ? 'eager' : 'lazy') + '">'
-  : '<div class="' + className + ' listing-placeholder">Sem foto cadastrada</div>';
-
 function listingCard(home) {
   const d = home.data;
   const href = '/#imovel/' + encodeURIComponent(home.id);
   const features = facts(d);
-  return '<article class="listing-card"><a class="listing-cover" href="' + href + '" aria-label="Ver imóvel: ' +
-    escape(d.title) + '">' + media(home, home.photos[0], 'listing-image') +
-    '</a><div class="listing-body"><p class="listing-location">' + locationLabel(d) + '</p>' +
-    '<h3><a href="' + href + '">' + escape(d.title) + '</a></h3>' +
-    (d.kind || features.length ? '<p class="listing-facts">' + [escape(d.kind), ...features].filter(Boolean).join(' · ') + '</p>' : '') +
-    '<div class="listing-bottom"><strong>' + money(d.price) + '</strong><a href="' + href +
-    '" class="listing-action">Ver imóvel <span aria-hidden="true">↗</span></a></div></div></article>';
+  const place = locationLabel(d);
+  const cover = home.photos[0] ? '<img class="listing-image" src="' + escape(photoUrl(home.id, home.photos[0])) +
+    '" alt="" loading="lazy" decoding="async">' :
+    '<div class="listing-image listing-placeholder">Sem foto cadastrada</div>';
+  return '<article class="listing-card"><a class="listing-link" href="' + href + '">' +
+    '<div class="listing-cover">' + cover +
+    (d.kind ? '<span class="listing-kind">' + escape(d.kind) + '</span>' : '') + '</div>' +
+    '<div class="listing-body">' + (place ? '<p class="listing-location">' + place + '</p>' : '') +
+    '<h3>' + escape(d.title) + '</h3>' +
+    (features.length ? '<ul class="listing-facts">' + features.map(value => '<li>' + value + '</li>').join('') + '</ul>' : '') +
+    '<div class="listing-bottom"><strong>' + money(d.price) + '</strong>' +
+    '<span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></div></a></article>';
 }
 
 function showBrand(settings) {
