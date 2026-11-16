@@ -1,0 +1,52 @@
+.property-page { --property-serif: var(--estate-display, Georgia, serif); }
+.property-page .estate-back { display: inline-block; margin-bottom: 26px; }
+.property-heading {
+  display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 14px 28px;
+  margin-bottom: clamp(20px, 3vw, 34px); padding-bottom: clamp(16px, 2vw, 25px);
+  border-bottom: 1px solid var(--estate-rule);
+}
+.property-heading h1 { font: 400 clamp(2.4rem, 5.2vw, 4.9rem)/1.02 var(--property-serif); margin: 0 0 8px; overflow-wrap: anywhere; }
+.property-heading .estate-kicker { margin-bottom: 9px; }
+.property-location, .property-reference { color: #526257; font-size: .88rem; margin: 0; }
+.property-reference { letter-spacing: .06em; overflow-wrap: anywhere; }
+.property-layout { display: grid; grid-template-columns: minmax(0, 2.18fr) minmax(260px, 1fr); gap: clamp(20px, 3vw, 38px); align-items: start; }
+.property-photo-stage, .property-photo-empty { position: relative; aspect-ratio: 1.65; background: #dedcd0; border-radius: 5px; overflow: hidden; }
+.property-photo-stage > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.property-photo-empty { display: grid; place-items: center; color: #46554c; }
+.property-expand, .property-photo-count {
+  position: absolute; bottom: 14px; min-height: 38px; padding: 7px 12px; border: 1px solid #fff7;
+  border-radius: 3px; background: #171613e8; color: white; font-size: .79rem;
+}
+.property-expand { right: 14px; gap: 8px; }
+.property-photo-count { left: 14px; display: grid; place-items: center; }
+.property-thumbnails { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
+.property-thumbnails button { display: block; min-width: 0; padding: 2px; background: transparent; border: 1px solid transparent; border-radius: 3px; }
+.property-thumbnails button[aria-pressed="true"] { border-color: var(--estate-accent); box-shadow: inset 0 0 0 1px var(--estate-accent); }
+.property-thumbnails img { display: block; width: 100%; aspect-ratio: 1.65; object-fit: cover; }
+.property-inquiry {
+  position: sticky; top: 24px; min-width: 0; border: 1px solid var(--estate-rule);
+  border-top: 3px solid var(--estate-accent); padding: clamp(17px, 2.6vw, 34px); background: #fffdf8;
+}
+.property-price p { color: #526257; font-size: .73rem; letter-spacing: .12em; text-transform: uppercase; }
+.property-price strong { display: block; font: 400 clamp(1.65rem, 2.8vw, 3.1rem)/1.08 var(--property-serif); overflow-wrap: anywhere; }
+.property-inquiry .estate-contact { border-top: 1px solid var(--estate-rule); padding-top: 18px; }
+.property-inquiry .estate-contact .btn { justify-content: space-between; gap: 10px; }
+.property-characteristics { margin-top: clamp(25px, 4vw, 48px); }
+.property-characteristics h2 { font-size: clamp(1.7rem, 3vw, 2.6rem); }
+.property-characteristics dl {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 135px), 1fr));
+  margin: 0; gap: 1px; background: var(--estate-rule); border: 1px solid var(--estate-rule);
+}
+.property-characteristics dl > div { min-width: 0; background: #fffdf8; padding: 14px; }
+.property-characteristics dt { font-size: .78rem; color: #526257; margin-bottom: 4px; }
+.property-characteristics dd { font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.property-lightbox { width: min(1080px, calc(100% - 24px)); max-height: 94dvh; padding: 12px; border: 0; color: white; background: #171613; }
+.property-lightbox::backdrop { background: #0d0c0be8; }
+.property-lightbox img { display: block; width: 100%; height: min(70dvh, 700px); object-fit: contain; }
+.property-viewer-bar, .property-viewer-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px; }
+.property-lightbox button { color: white; background: transparent; border-color: #fff7; }
+@media (max-width: 760px) {
+  .property-layout { display: flex; flex-direction: column; }
+  .property-layout > div, .property-inquiry { width: 100%; }
+  .property-inquiry { position: static; }
+}

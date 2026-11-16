@@ -1,5 +1,6 @@
 import {app, escape, link, money} from './ui.js';
 import {request} from './api.js';
+import {propertyDetail} from './property-detail.js';
 
 const filters = [
   ['q', 'Localização ou imóvel', 'type="search" maxlength="120" placeholder="Cidade, bairro ou código"'],
@@ -127,30 +128,5 @@ export async function details(id, isCurrent) {
   if (!isCurrent()) return;
   showBrand(settings);
   showMenu(settings);
-  const d = home.data;
-  const features = facts(d);
-  app.innerHTML = '<a class="estate-back" href="/#vitrine">← Voltar à vitrine</a>' +
-    '<div class="estate-detail-heading"><p class="estate-kicker">' + escape(d.kind) + '</p><h1>' + escape(d.title) +
-    '</h1><p class="listing-location">' + locationLabel(d) + '</p></div>' +
-    '<div class="estate-detail"><section aria-label="Fotos do imóvel">' +
-    media(home, home.photos[0], 'estate-main-photo', true) +
-    (home.photos.length > 1 ? '<div class="estate-thumbnails">' + home.photos.map((photo,index) =>
-      '<button type="button" data-photo="' + escape(photo) + '" aria-label="Mostrar foto ' + (index + 1) +
-      '" aria-pressed="' + (index === 0) + '">' + media(home, photo, 'estate-thumbnail') + '</button>').join('') + '</div>' : '') +
-    '</section><aside class="estate-summary"><p class="estate-kicker">Valor do imóvel</p><strong>' + money(d.price) + '</strong>' +
-    (features.length ? '<ul>' + features.map(feature => '<li>' + feature + '</li>').join('') + '</ul>' : '') +
-    '<div class="estate-contact">' +
-    (settings.whatsapp ? '<a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/' +
-      escape(settings.whatsapp) + '?text=' + encodeURIComponent('Olá, gostaria de informações sobre ' + d.title + ' (' + d.code + ').') +
-      '">Falar no WhatsApp</a>' : '') +
-    (d.album && /^https?:\/\//i.test(d.album) ? '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="' +
-      escape(d.album) + '">Ver álbum externo</a>' : '') + '</div></aside></div>';
-  const thumbnails = document.querySelector('.estate-thumbnails');
-  if (!thumbnails) return;
-  thumbnails.onclick = event => {
-    const selected = event.target.closest('button[data-photo]');
-    if (!selected) return;
-    document.querySelector('.estate-main-photo').src = photoUrl(home.id, selected.dataset.photo);
-    for (const button of thumbnails.querySelectorAll('button')) button.setAttribute('aria-pressed', String(button === selected));
-  };
+  propertyDetail(home, settings, locationLabel(home.data));
 }
