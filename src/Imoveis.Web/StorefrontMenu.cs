@@ -18,6 +18,13 @@ sealed class StorefrontMenu(NpgsqlDataSource db)
         return items;
     }
 
+    public async Task<bool> DeleteCategory(Guid id, CancellationToken ct)
+    {
+        await using var command = db.CreateCommand("DELETE FROM storefront_menu WHERE id=@id AND kind='category'");
+        command.Parameters.AddWithValue("id", id);
+        return await command.ExecuteNonQueryAsync(ct) == 1;
+    }
+
     public async Task<bool> Save(Guid id, string name, int position, bool visible, bool create, CancellationToken ct)
     {
         await using var command = db.CreateCommand(create ? """

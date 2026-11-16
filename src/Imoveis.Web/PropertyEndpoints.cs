@@ -33,6 +33,10 @@ static class PropertyEndpoints
                 return Results.Conflict("O imóvel foi atualizado em outra tela. Reabra o cadastro.");
             return create ? Results.Created($"/api/admin/imoveis/{id}", new { id }) : Results.NoContent();
         }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            return Results.Conflict("A categoria mudou. Reabra o cadastro e selecione outra categoria.");
+        }
         catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation)
         {
             return Results.Conflict("Já existe um imóvel com esse código nesta origem.");

@@ -88,3 +88,19 @@ td input,td select { min-width: 140px; }
 
 #public-menu { display: none; }
 .menu-visible { display: flex; align-items: center; gap: 8px; }
+
+.menu-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.menu-heading h2 { margin: 0; }
+.menu-table { padding: 0; }
+.menu-table th, .menu-table td { vertical-align: middle; }
+.menu-table tbody th { background: transparent; }
+.menu-actions, .menu-dialog-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.menu-actions button { min-height: 34px; }
+.menu-delete { background: transparent; color: #942d28; border-color: #e2bbb8; }
+.menu-status { display: inline-block; padding: 3px 9px; border-radius: 20px; background: #eceeea; color: #425347; white-space: nowrap; }
+.menu-status.is-visible { background: #dcefe4; color: #194c36; }
+#menu-dialog { width: min(560px, calc(100% - 32px)); padding: 24px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); }
+#menu-dialog::backdrop { background: #081d17a6; }
+#menu-dialog .menu-visible { margin: 16px 0; }
+.menu-dialog-actions { justify-content: flex-end; }
+.menu-error { color: #942d28; }

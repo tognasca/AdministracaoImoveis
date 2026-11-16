@@ -14,6 +14,20 @@ static class MenuEndpoints
         menu.MapPut("/{id:guid}", (Guid id, MenuInput input, StorefrontMenu store, CancellationToken ct) =>
             Save(id, input, store, false, ct))
             .RequireAuthorization(policy => policy.RequireRole("Administrador"));
+        menu.MapDelete("/{id:guid}", DeleteCategory)
+            .RequireAuthorization(policy => policy.RequireRole("Administrador"));
+    }
+
+    private static async Task<IResult> DeleteCategory(Guid id, StorefrontMenu store, CancellationToken ct)
+    {
+        try
+        {
+            return await store.DeleteCategory(id, ct) ? Results.NoContent() : Results.NotFound();
+        }
+        catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            return Results.Conflict("Há imóveis vinculados a esta categoria. Remova os vínculos ou oculte a categoria no menu.");
+        }
     }
 
     private static async Task<IResult> Save(Guid id, MenuInput input, StorefrontMenu store, bool create, CancellationToken ct)
