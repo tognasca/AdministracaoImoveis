@@ -6,6 +6,7 @@ import {adminNav, bindLogout, login, setSession} from './admin-ui.js';
 import {adminListing} from './catalog.js';
 import {storefront, details} from './storefront.js';
 import {editor} from './editor.js';
+import {manageMenu} from './menu.js';
 import {staff} from './staff.js';
 
 let navigation = 0;
@@ -13,8 +14,9 @@ async function render() {
   const current = ++navigation;
   const isCurrent = () => current === navigation;
   const [path,query] = location.hash.slice(1).split('?');
-  const [route,id] = (path || (location.pathname.replace(/\/$/,'') === '/admin/importacoes' ? 'importar' : '')).split('/');
-  const adminRoute = ['admin','editar','importar','usuarios','configuracoes'].includes(route);
+  const directRoute = {'/admin':'admin','/admin/importacoes':'importar'}[location.pathname.replace(/\/$/,'')];
+  const [route,id] = (path || directRoute || '').split('/');
+  const adminRoute = ['admin','editar','importar','usuarios','configuracoes','menu'].includes(route);
   document.body.classList.toggle('estate-site', !adminRoute);
   app.innerHTML = '<p>Carregando…</p>';
   window.scrollTo(0, 0);
@@ -24,7 +26,9 @@ async function render() {
       if (!isCurrent()) return;
       setSession(currentSession);
     }
-    if (route === 'configuracoes') {
+    if (route === 'menu') {
+      await manageMenu(isCurrent);
+    } else if (route === 'configuracoes') {
       await showSettings(isCurrent);
     } else if (route === 'usuarios') {
       await staff(isCurrent);

@@ -85,3 +85,6 @@ td input,td select { min-width: 140px; }
 
 .theme-color { margin-top: 14px; }
 .theme-color input { width: 76px; padding: 4px; cursor: pointer; }
+
+#public-menu { display: none; }
+.menu-visible { display: flex; align-items: center; gap: 8px; }

@@ -10,16 +10,16 @@ static class PublicEndpoints
             await query.ExecuteScalarAsync(ct);
             return Results.Ok(new { status = "ok" });
         });
-        app.MapGet("/api/vitrine/configuracao", async (IConfiguration settings, StorefrontImages images, StorefrontBrand brand, CancellationToken ct) =>
+        app.MapGet("/api/vitrine/configuracao", async (IConfiguration settings, StorefrontImages images, StorefrontBrand brand, StorefrontMenu menu, CancellationToken ct) =>
         {
             var number = settings["Vitrine:WhatsApp"] ?? "";
             var (name, color) = await brand.Read(ct);
-            return Results.Ok(new { name, color, whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
+            return Results.Ok(new { name, color, menu = await menu.List(true, ct), whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
                 ? number : "", banner = images.Exists(StorefrontImage.Banner) ? "/media/vitrine/banner" : null,
                 logo = images.Exists(StorefrontImage.Logo) ? "/media/vitrine/logo" : null });
         });
-        app.MapGet("/api/imoveis", (PropertyStore db, string? q, int? page, string? kind, decimal? maxPrice, int? bedrooms, CancellationToken ct) =>
-            db.Get(false, null, PropertyEndpoints.Search(q), PropertyEndpoints.Page(page), ct, PropertyEndpoints.Search(kind), Math.Max(0, maxPrice ?? 0), Math.Max(0, bedrooms ?? 0)));
+        app.MapGet("/api/imoveis", (PropertyStore db, string? q, int? page, string? kind, decimal? maxPrice, int? bedrooms, Guid? category, bool? gallery, CancellationToken ct) =>
+            db.Get(false, null, PropertyEndpoints.Search(q), PropertyEndpoints.Page(page), ct, PropertyEndpoints.Search(kind), Math.Max(0, maxPrice ?? 0), Math.Max(0, bedrooms ?? 0), category, gallery == true));
         app.MapGet("/api/imoveis/{id:guid}", async (Guid id, PropertyStore db, CancellationToken ct) =>
         {
             var result = await db.Get(false, id, "", 1, ct);

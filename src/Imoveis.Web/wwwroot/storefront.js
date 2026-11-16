@@ -50,6 +50,21 @@ function showBrand(settings) {
   document.querySelector('footer span').textContent = name;
 }
 
+function showMenu(settings, category, gallery) {
+  const items = settings.menu ?? [];
+  document.querySelector('#public-menu').innerHTML = items.map(item => {
+    if (item.kind === 'category')
+      return '<a href="/#vitrine?category=' + encodeURIComponent(item.id) + '"' +
+        (item.id === category ? ' aria-current="page"' : '') + '>' + escape(item.name) + '</a>';
+    if (item.kind === 'gallery')
+      return '<a href="/#vitrine?gallery=true"' + (gallery ? ' aria-current="page"' : '') + '>' + escape(item.name) + '</a>';
+    if (item.kind === 'contact' && settings.whatsapp)
+      return '<a href="https://wa.me/' + escape(settings.whatsapp) + '" target="_blank" rel="noopener noreferrer">' +
+        escape(item.name) + '</a>';
+    return '';
+  }).join('');
+}
+
 export async function storefront(params, isCurrent) {
   const page = Math.max(1, Number.parseInt(params.get('page'), 10) || 1);
   const values = new URLSearchParams();
@@ -57,13 +72,21 @@ export async function storefront(params, isCurrent) {
     const value = params.get(key);
     if (value) values.set(key, value);
   }
-  const query = next => new URLSearchParams([...values, ['page', String(next)]]);
+  const rawCategory = params.get('category') ?? '';
+  const category = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(rawCategory) ? rawCategory.toLowerCase() : '';
+  const gallery = !category && params.get('gallery') === 'true';
+  const section = new URLSearchParams(category ? {category} : gallery ? {gallery:'true'} : {});
+  const query = next => new URLSearchParams([...section, ...values, ['page', String(next)]]);
   const [homes, settings] = await Promise.all([
     request('/api/imoveis?' + query(page)),
     request('/api/vitrine/configuracao').catch(() => ({}))
   ]);
   if (!isCurrent()) return;
   showBrand(settings);
+  showMenu(settings, category, gallery);
+  const sectionTitle = settings.menu?.find(item => category ? item.id === category : gallery && item.kind === 'gallery')?.name;
+  const heading = sectionTitle || (category ? 'Categoria de imóveis' : gallery ? 'Galeria' :
+    values.size ? 'Resultados da busca' : 'Imóveis disponíveis');
 
   const banner = settings.banner;
   app.innerHTML = '<section class="estate-hero' + (banner ? '' : ' estate-hero-plain') + '">' +
@@ -74,10 +97,10 @@ export async function storefront(params, isCurrent) {
       attributes + ' value="' + escape(values.get(key)) + '"></label>').join('') +
     '<button type="submit">Buscar imóveis</button></form></div></section>' +
     '<section id="resultados" class="estate-results" aria-labelledby="listing-title"><div class="estate-section-head">' +
-    '<h2 id="listing-title" tabindex="-1">' + (values.size ? 'Resultados da busca' : 'Imóveis disponíveis') + '</h2>' +
-    (values.size ? '<a class="listing-action" href="/#vitrine">Limpar filtros</a>' : '') + '</div>' +
+    '<h2 id="listing-title" tabindex="-1">' + escape(heading) + '</h2>' +
+    (values.size ? '<a class="listing-action" href="/#vitrine?' + escape(section.toString()) + '">Limpar filtros</a>' : '') + '</div>' +
     (homes.length ? '<div class="estate-grid">' + homes.map(listingCard).join('') + '</div>' :
-      '<p class="estate-empty">' + (values.size ? 'Nenhum imóvel corresponde aos filtros.' : 'Ainda não há imóveis publicados.') + '</p>') +
+      '<p class="estate-empty">' + (values.size || category || gallery ? 'Nenhum imóvel nesta seleção.' : 'Ainda não há imóveis publicados.') + '</p>') +
     '<div class="row estate-pages">' + (page > 1 ? link('Página anterior', 'vitrine?' + query(page-1), true) : '') +
     (homes.length === 30 ? link('Próxima página', 'vitrine?' + query(page+1), true) : '') + '</div></section>';
 
@@ -88,12 +111,12 @@ export async function storefront(params, isCurrent) {
   }
   document.querySelector('#search').onsubmit = event => {
     event.preventDefault();
-    const next = 'vitrine?' + new URLSearchParams([...new FormData(event.currentTarget)]
-      .map(([key,value]) => [key,value.trim()]).filter(([,value]) => value));
+    const next = 'vitrine?' + new URLSearchParams([...section, ...[...new FormData(event.currentTarget)]
+      .map(([key,value]) => [key,value.trim()]).filter(([,value]) => value)]);
     if (location.hash === '#' + next) showResults();
     else location.hash = next;
   };
-  if (values.size || page > 1) showResults();
+  if (values.size || category || gallery || page > 1) showResults();
 }
 
 export async function details(id, isCurrent) {
@@ -103,6 +126,7 @@ export async function details(id, isCurrent) {
   ]);
   if (!isCurrent()) return;
   showBrand(settings);
+  showMenu(settings);
   const d = home.data;
   const features = facts(d);
   app.innerHTML = '<a class="estate-back" href="/#vitrine">← Voltar à vitrine</a>' +

@@ -20,7 +20,7 @@ docker compose ps
 Invoke-RestMethod http://localhost:5086/health
 ```
 
-- Painel administrativo — http://localhost:5086/#admin
+- Painel administrativo — http://localhost:5086/admin
 - Vitrine — http://localhost:5086/#vitrine
 
 O modo Development permite a autenticação por HTTP no endereço local. A porta está vinculada a 127.0.0.1. Para uma implantação externa, configure HTTPS com o proxy, use Production e mantenha a porta do PostgreSQL interna. Não compartilhe o .env.
@@ -65,3 +65,7 @@ Remove-Item Env:IMOVEIS_ADMIN_PASSWORD
 ```
 
 A homologação final inclui navegador no celular com HTTPS, dados reais do cliente, capacidade do disco e restauração do backup. OLX e Imovelweb pertencem à etapa futura de integração com portais. As telas são HTML e JavaScript servidos pelo ASP.NET Core.
+
+### Menu público
+
+Em **Menu da vitrine**, crie categorias, altere nomes, posições e visibilidade. Selecione a categoria no cadastro do imóvel. As categorias e a galeria exibem apenas anúncios publicados. A galeria reúne anúncios com fotos. O item Contato aparece quando o WhatsApp da vitrine está configurado.

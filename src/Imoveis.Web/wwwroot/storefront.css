@@ -135,3 +135,6 @@
 @media (max-width: 350px) {
   .estate-search { grid-template-columns: minmax(0, 1fr); }
 }
+
+.estate-site #public-menu:not(:empty) { display: flex; }
+.estate-site #public-menu [aria-current="page"] { text-decoration: underline; }

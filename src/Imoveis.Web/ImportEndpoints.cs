@@ -121,7 +121,7 @@ static class ImportEndpoints
                     if (row.Id is { } id)
                     {
                         await using var current = new NpgsqlCommand("""
-                            SELECT code,status,album FROM properties
+                            SELECT code,status,album,category_id FROM properties
                             WHERE id=@id AND version=@version AND lower(source)=lower(@source) FOR UPDATE
                             """, connection, transaction);
                         current.Parameters.AddWithValue("id", id);
@@ -131,9 +131,10 @@ static class ImportEndpoints
                         if (!await reader.ReadAsync(ct) || !string.Equals(reader.GetString(0), data.Code, StringComparison.OrdinalIgnoreCase))
                             return Results.Conflict("Um imóvel mudou. Gere a prévia novamente antes de importar.");
                         data = data with { Code = reader.GetString(0), Status = reader.GetString(1),
-                            Album = reader.IsDBNull(2) ? null : reader.GetString(2) };
+                            Album = reader.IsDBNull(2) ? null : reader.GetString(2),
+                            CategoryId = reader.IsDBNull(3) ? null : reader.GetGuid(3) };
                     }
-                    else data = data with { Status = "Rascunho", Album = null, Version = 0 };
+                    else data = data with { Status = "Rascunho", Album = null, Version = 0, CategoryId = null };
 
                     if (validate(data) is { } error) return Results.BadRequest(error);
                     if (!codes.Add(data.Code.Trim())) return Results.BadRequest("O lote tem códigos repetidos.");

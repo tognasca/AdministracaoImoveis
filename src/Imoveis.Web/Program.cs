@@ -11,7 +11,9 @@ StaffEndpoints.Map(admin);
 PropertyEndpoints.Map(admin);
 MediaEndpoints.Map(admin);
 StorefrontEndpoints.Map(admin);
+MenuEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);
+app.MapFallbackToFile("/admin", "index.html", WebStartup.StaticAssets());
 app.MapFallbackToFile("/admin/importacoes", "index.html", WebStartup.StaticAssets());
 
 app.Run();

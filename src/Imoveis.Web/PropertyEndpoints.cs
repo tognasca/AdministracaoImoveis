@@ -14,17 +14,19 @@ static class PropertyEndpoints
         admin.MapPost("/imoveis/publicar-rascunhos", async (PropertyStore store, CancellationToken ct) =>
             Results.Ok(new { published = await store.PublishReadyDrafts(ct) }))
             .RequireAuthorization(policy => policy.RequireRole("Administrador"));
-        admin.MapPost("/imoveis", (PropertyInput input, PropertyStore store, CancellationToken ct) =>
-            Save(Guid.NewGuid(), input, true, store, ct));
-        admin.MapPut("/imoveis/{id:guid}", (Guid id, PropertyInput input, PropertyStore store, CancellationToken ct) =>
-            Save(id, input, false, store, ct));
+        admin.MapPost("/imoveis", (PropertyInput input, PropertyStore store, StorefrontMenu menu, CancellationToken ct) =>
+            Save(Guid.NewGuid(), input, true, store, menu, ct));
+        admin.MapPut("/imoveis/{id:guid}", (Guid id, PropertyInput input, PropertyStore store, StorefrontMenu menu, CancellationToken ct) =>
+            Save(id, input, false, store, menu, ct));
     }
 
     internal static string Search(string? q) => (q ?? "").Trim()[..Math.Min((q ?? "").Trim().Length, 120)];
     internal static int Page(int? page) => Math.Clamp(page ?? 1, 1, 10000);
-    static async Task<IResult> Save(Guid id, PropertyInput input, bool create, PropertyStore store, CancellationToken ct)
+    static async Task<IResult> Save(Guid id, PropertyInput input, bool create, PropertyStore store, StorefrontMenu menu, CancellationToken ct)
     {
         if (PropertyValidation.Validate(input) is { } error) return Results.BadRequest(error);
+        if (input.CategoryId is { } category && !(await menu.List(false, ct)).Any(item => item.Id == category && item.Kind == "category"))
+            return Results.BadRequest("Selecione uma categoria válida.");
         try
         {
             if (!await store.Save(id, input, create, ct))
