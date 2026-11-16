@@ -103,7 +103,7 @@
   gap: 12px 24px; margin-bottom: clamp(24px, 4vw, 46px);
   border-bottom: 1px solid var(--estate-rule); padding-bottom: 14px;
 }
-.estate-section-head h2 { margin: 0; font-size: clamp(2.1rem, 4.1vw, 3.85rem); line-height: 1.04; scroll-margin-top: 18px; }
+.estate-section-head h2 { margin: 0; color: #26241f; font-size: clamp(2.1rem, 4.1vw, 3.85rem); line-height: 1.04; scroll-margin-top: 18px; }
 .estate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(23px, 3.2vw, 46px) clamp(14px, 2.1vw, 26px); }
 .listing-card { display: flex; min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .listing-link { display: flex; flex: 1; flex-direction: column; min-width: 0; text-decoration: none; }
