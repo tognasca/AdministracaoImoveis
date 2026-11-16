@@ -40,9 +40,10 @@ function showBrand(settings) {
     return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
   });
   const luminance = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+  const darkText = settings.textColor === 'black' || (settings.textColor !== 'white' && luminance > .179);
   document.body.style.setProperty('--estate-accent', color);
-  document.body.style.setProperty('--estate-on-accent', luminance > .179 ? '#000' : '#fff');
-  document.body.style.setProperty('--estate-accent-shade', luminance > .179 ? '#fff' : '#000');
+  document.body.style.setProperty('--estate-on-accent', darkText ? '#000' : '#fff');
+  document.body.style.setProperty('--estate-accent-shade', darkText ? '#fff' : '#000');
   const name = settings.name || 'Imóveis Cotia';
   document.title = name;
   const brandMarkup = (settings.logo ? '<img class="site-logo" src="' + escape(settings.logo) + '" alt="">' : '') +

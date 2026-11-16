@@ -147,3 +147,17 @@
 
 .estate-site #public-menu:not(:empty) { display: flex; }
 .estate-site #public-menu [aria-current="page"] { text-decoration: underline; }
+
+.estate-search, .property-inquiry {
+  color: var(--estate-on-accent);
+  background: var(--estate-accent);
+  border-color: var(--estate-accent);
+}
+.estate-search button, .property-inquiry .estate-contact .btn {
+  color: var(--estate-accent-shade);
+  background: var(--estate-on-accent);
+  border-color: var(--estate-on-accent);
+}
+.property-inquiry .estate-contact .alt { color: inherit; background: transparent; border-color: currentColor; }
+.estate-search :focus-visible, .property-inquiry :focus-visible { outline-color: var(--estate-on-accent); }
+.estate-search input, .property-contact-form input, .property-contact-form textarea { background: #fffdf8; color: #171613; }

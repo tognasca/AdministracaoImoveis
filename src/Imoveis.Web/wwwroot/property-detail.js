@@ -70,9 +70,15 @@ export function propertyDetail(home, settings, location) {
     ['Área informada', d.size > 0 ? Number(d.size).toLocaleString('pt-BR') + ' m²' : ''],
     ['Localização', [d.district, d.city].filter(Boolean).join(' · ')]
   ].filter(([, value]) => value);
-  const contact = settings.whatsapp ? '<a class="btn" target="_blank" rel="noopener noreferrer" href="https://wa.me/' +
-    escape(settings.whatsapp) + '?text=' + encodeURIComponent('Olá, gostaria de informações sobre ' + d.title + ' (' + d.code + ').') +
-    '">Falar no WhatsApp <span aria-hidden="true">↗</span></a>' : '';
+  const whatsapp = /^[0-9]{10,15}$/.test(settings.whatsapp) ? settings.whatsapp : '';
+  const email = settings.email || '';
+  const contact = whatsapp || email ? '<form class="property-contact-form" id="property-contact-form">' +
+    '<h2>Fale sobre este imóvel</h2><label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
+    '<label>Sua mensagem<textarea name="message" rows="3" maxlength="800" required>Olá, gostaria de mais informações sobre este imóvel.</textarea></label>' +
+    '<div class="estate-contact">' +
+    (whatsapp ? '<button type="submit" value="whatsapp" class="btn">Continuar no WhatsApp</button>' : '') +
+    (email ? '<button type="submit" value="email" class="btn alt">Abrir e-mail</button>' : '') +
+    '</div><p class="property-contact-hint">Revise e envie a mensagem no aplicativo escolhido.</p></form>' : '';
   const album = d.album && /^https?:\/\//i.test(d.album) ? '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="' +
     escape(d.album) + '">Ver álbum externo <span aria-hidden="true">↗</span></a>' : '';
   app.innerHTML = '<div class="property-page"><a class="estate-back" href="/#vitrine">← Voltar aos imóveis</a>' +
@@ -85,6 +91,27 @@ export function propertyDetail(home, settings, location) {
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
     '</div><aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price"><p>Valor do imóvel</p>' +
     '<strong>' + money(d.price) + '</strong></div>' +
-    (contact || album ? '<div class="estate-contact">' + contact + album + '</div>' : '') + '</aside></div></div>';
+    contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside></div></div>';
   bindGallery(home);
+  if (!contact) return;
+  const form = app.querySelector('#property-contact-form');
+  form.oninput = event => event.target.setCustomValidity('');
+  form.onsubmit = event => {
+    event.preventDefault();
+    const {contactName, message} = form.elements;
+    const empty = [contactName, message].find(field => !field.value.trim());
+    if (empty) {
+      empty.setCustomValidity('Preencha este campo.');
+      empty.reportValidity();
+      return;
+    }
+    const subject = 'Contato sobre ' + d.title + ' (ref. ' + d.code + ')';
+    const text = 'Imóvel: ' + d.title + ' (ref. ' + d.code + ')\nNome: ' + contactName.value.trim() + '\n\n' + message.value.trim();
+    if ((event.submitter?.value === 'email' || !whatsapp) && email) {
+      const recipient = encodeURIComponent(email).replace('%40', '@');
+      location.href = 'mailto:' + recipient + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
+    } else {
+      location.href = 'https://wa.me/' + whatsapp + '?text=' + encodeURIComponent(text);
+    }
+  };
 }

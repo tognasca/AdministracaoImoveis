@@ -104,3 +104,5 @@ td input,td select { min-width: 140px; }
 #menu-dialog .menu-visible { margin: 16px 0; }
 .menu-dialog-actions { justify-content: flex-end; }
 .menu-error { color: #942d28; }
+
+.storefront-contact-settings { margin-top: 16px; }

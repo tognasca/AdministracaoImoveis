@@ -12,9 +12,9 @@ static class PublicEndpoints
         });
         app.MapGet("/api/vitrine/configuracao", async (IConfiguration settings, StorefrontImages images, StorefrontBrand brand, StorefrontMenu menu, CancellationToken ct) =>
         {
-            var number = settings["Vitrine:WhatsApp"] ?? "";
-            var (name, color) = await brand.Read(ct);
-            return Results.Ok(new { name, color, menu = await menu.List(true, ct), whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
+            var (name, color, email, whatsapp, textColor) = await brand.Read(ct);
+            var number = whatsapp ?? settings["Vitrine:WhatsApp"] ?? "";
+            return Results.Ok(new { name, color, textColor, email, menu = await menu.List(true, ct), whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
                 ? number : "", banner = images.Exists(StorefrontImage.Banner) ? "/media/vitrine/banner" : null,
                 logo = images.Exists(StorefrontImage.Logo) ? "/media/vitrine/logo" : null });
         });
