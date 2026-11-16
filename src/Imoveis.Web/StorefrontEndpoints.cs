@@ -1,6 +1,6 @@
 static class StorefrontEndpoints
 {
-    private sealed record BrandInput(string? Name, string? Color, string? Email, string? WhatsApp, string? TextColor);
+    private sealed record BrandInput(string? Name, string? Color, string? Email, string? WhatsApp, string? TextColor, int? ColorOpacity);
 
     public static void Map(RouteGroupBuilder admin)
     {
@@ -22,7 +22,9 @@ static class StorefrontEndpoints
                 return Results.BadRequest("Informe o WhatsApp com código do país e DDD, usando de 10 a 15 dígitos.");
             if (input.TextColor is not (null or "auto" or "black" or "white"))
                 return Results.BadRequest("Escolha texto automático, preto ou branco.");
-            await brand.Save(name, color?.ToUpperInvariant(), email, whatsapp, input.TextColor, ct);
+            if (input.ColorOpacity is < 0 or > 100)
+                return Results.BadRequest("Informe uma opacidade entre 0 e 100%.");
+            await brand.Save(name, color?.ToUpperInvariant(), email, whatsapp, input.TextColor, input.ColorOpacity, ct);
             return Results.NoContent();
         });
         MapImage(storefront, "/banner", StorefrontImage.Banner);

@@ -1,4 +1,5 @@
 import {app, escape, notice, report} from './ui.js';
+import {storefrontTheme} from './storefront-theme.js';
 import {request} from './api.js';
 import {adminNav, bindLogout, getSession} from './admin-ui.js';
 import {optimizeImage} from './image.js';
@@ -27,10 +28,13 @@ export async function showSettings(isCurrent) {
     (allowed ? '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
       '<label>Nome do site<input name="siteName" required maxlength="80" value="' + escape(settings.name) + '"></label>' +
       '<label class="theme-color">Cor da vitrine<input name="siteColor" type="color" value="' + escape(settings.color || '#6B5140') + '"></label>' +
+      '<label class="theme-opacity"><span>Opacidade da cor <output id="opacity-value"></output></span>' +
+      '<input name="colorOpacity" type="range" min="0" max="100" step="1" value="' + escape(settings.colorOpacity ?? 100) + '"></label>' +
       '<label class="theme-color">Texto sobre a cor da vitrine<select name="textColor">' +
       [['auto','Automática'],['black','Preto'],['white','Branco']].map(([value,label]) =>
         '<option value="' + value + '"' + (value === settings.textColor ? ' selected' : '') + '>' + label + '</option>').join('') +
       '</select></label><small>Se a combinação escolhida tiver pouco contraste, a vitrine usa a cor de texto mais legível.</small>' +
+      '<div class="theme-preview" id="theme-preview">Prévia da cor e do texto</div>' +
       '<div class="grid storefront-contact-settings"><label>E-mail de contato<input name="email" type="email" maxlength="254" value="' +
       escape(settings.email) + '"></label><label>WhatsApp com código do país e DDD<input name="whatsapp" type="tel" inputmode="numeric" ' +
       'pattern="[0-9]{10,15}" maxlength="15" placeholder="5511999999999" value="' + escape(settings.whatsapp) + '"></label></div>' +
@@ -51,6 +55,18 @@ export async function showSettings(isCurrent) {
   }
 
   const brand = app.querySelector('#brand-form');
+  const opacityValue = app.querySelector('#opacity-value');
+  const preview = app.querySelector('#theme-preview');
+  function updatePreview() {
+    const colorOpacity = brand.elements.colorOpacity.valueAsNumber;
+    const theme = storefrontTheme({color:brand.elements.siteColor.value, colorOpacity, textColor:brand.elements.textColor.value});
+    opacityValue.textContent = colorOpacity + '%';
+    preview.style.backgroundColor = theme.background;
+    preview.style.color = theme.foreground;
+  }
+  brand.addEventListener('input', updatePreview);
+  brand.addEventListener('change', updatePreview);
+  updatePreview();
   brand.onsubmit = event => {
     event.preventDefault();
     const name = brand.elements.siteName.value.trim();
@@ -58,7 +74,8 @@ export async function showSettings(isCurrent) {
     const email = brand.elements.email.value.trim();
     const whatsapp = brand.elements.whatsapp.value.trim();
     const textColor = brand.elements.textColor.value;
-    change(() => request(endpoint + 'identidade','PUT',{name,color,textColor,email,whatsapp}), 'Identidade da vitrine salva.');
+    const colorOpacity = brand.elements.colorOpacity.valueAsNumber;
+    change(() => request(endpoint + 'identidade','PUT',{name,color,colorOpacity,textColor,email,whatsapp}), 'Identidade da vitrine salva.');
   };
 
   for (const {key,label,size} of images) {

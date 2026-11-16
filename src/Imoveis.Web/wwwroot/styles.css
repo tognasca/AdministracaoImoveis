@@ -116,3 +116,8 @@ td input,td select { min-width: 140px; }
   .table table { min-width: 450px; }
   .menu-actions { flex-wrap: nowrap; }
 }
+
+.theme-opacity { margin-top: 14px; }
+.theme-opacity output { margin-left: 5px; font-variant-numeric: tabular-nums; }
+.theme-opacity input { padding: 0; border: 0; accent-color: var(--forest); }
+.theme-preview { margin-top: 12px; padding: 12px 15px; border: 1px solid var(--line); border-radius: 6px; font-weight: 600; }

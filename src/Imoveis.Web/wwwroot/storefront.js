@@ -1,4 +1,5 @@
 import {app, escape, link, money} from './ui.js';
+import {storefrontTheme} from './storefront-theme.js';
 import {request} from './api.js';
 import {kindSelect} from './property-kinds.js';
 import {propertyDetail} from './property-detail.js';
@@ -36,20 +37,10 @@ function listingCard(home) {
 }
 
 function showBrand(settings) {
-  const color = /^#[0-9a-f]{6}$/i.test(settings.color) ? settings.color : '#6B5140';
-  const channels = color.slice(1).match(/../g).map(value => {
-    const channel = parseInt(value, 16) / 255;
-    return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
-  });
-  const luminance = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
-  const blackContrast = (luminance + .05) / .05;
-  const whiteContrast = 1.05 / (luminance + .05);
-  let darkText = blackContrast >= whiteContrast;
-  if (settings.textColor === 'black' && blackContrast >= 4.5) darkText = true;
-  if (settings.textColor === 'white' && whiteContrast >= 4.5) darkText = false;
-  document.body.style.setProperty('--estate-accent', color);
-  document.body.style.setProperty('--estate-on-accent', darkText ? '#000' : '#fff');
-  document.body.style.setProperty('--estate-accent-shade', darkText ? '#fff' : '#000');
+  const theme = storefrontTheme(settings);
+  document.body.style.setProperty('--estate-accent', theme.background);
+  document.body.style.setProperty('--estate-on-accent', theme.foreground);
+  document.body.style.setProperty('--estate-accent-shade', theme.shade);
   const name = settings.name || 'Imóveis Cotia';
   document.title = name;
   const brandMarkup = (settings.logo ? '<img class="site-logo" src="' + escape(settings.logo) + '" alt="">' : '') +
