@@ -18,6 +18,7 @@ static class PublicEndpoints
                 ? number : "", banner = images.Exists(StorefrontImage.Banner) ? "/media/vitrine/banner" : null,
                 logo = images.Exists(StorefrontImage.Logo) ? "/media/vitrine/logo" : null });
         });
+        app.MapGet("/api/imoveis/tipos", (PropertyStore store, CancellationToken ct) => store.ListKinds(false, ct));
         app.MapGet("/api/imoveis", (PropertyStore db, string? q, int? page, string? kind, decimal? maxPrice, int? bedrooms, Guid? category, bool? gallery, CancellationToken ct) =>
             db.Get(false, null, PropertyEndpoints.Search(q), PropertyEndpoints.Page(page), ct, PropertyEndpoints.Search(kind), Math.Max(0, maxPrice ?? 0), Math.Max(0, bedrooms ?? 0), category, gallery == true));
         app.MapGet("/api/imoveis/{id:guid}", async (Guid id, PropertyStore db, CancellationToken ct) =>

@@ -2,6 +2,7 @@ import {app, root, escape, link, notice, report} from './ui.js';
 import {request} from './api.js';
 import {adminNav, bindLogout} from './admin-ui.js';
 import {menuEndpoint} from './menu.js';
+import {kindSelect, standardKinds} from './property-kinds.js';
 import {mountGallery} from './gallery.js';
 
 const fields = [
@@ -11,9 +12,10 @@ const fields = [
 ];
 const statuses = ['Rascunho','Publicado','Vendido','Retirado'];
 export async function editor(id, isCurrent) {
-  const [home, menu] = await Promise.all([
+  const [home, menu, kinds] = await Promise.all([
     id ? request(root + '/' + encodeURIComponent(id)) : null,
-    request(menuEndpoint)
+    request(menuEndpoint),
+    request(root + '/tipos')
   ]);
   if (!isCurrent()) return;
   const d = home?.data ?? {status:'Rascunho', source:'Cadastro manual'};
@@ -31,7 +33,8 @@ export async function editor(id, isCurrent) {
     menu.filter(item => item.kind === 'category').map(item => '<option value="' + escape(item.id) + '"' +
       (item.id === d.categoryId ? ' selected' : '') + '>' + escape(item.name) + (item.visible ? '' : ' (oculta no menu)') +
       '</option>').join('') + '</select></label>';
-  const field = ([key,label,length]) =>
+  const field = ([key,label,length]) => key === 'kind'
+    ? '<label>' + label + kindSelect([...standardKinds, ...kinds], d.kind, 'Selecione o tipo') + '</label>' :
     '<label>' + label + '<input name="' + key + '" value="' + escape(d[key]) + '" ' +
     (length ? 'maxlength="' + length + '" type="' + (key === 'album' ? 'url' : 'text') + '"' :
       'type="number" min="0" step="' + (key === 'bedrooms' ? '1' : '0.01') + '"') +

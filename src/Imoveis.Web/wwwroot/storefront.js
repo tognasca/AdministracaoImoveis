@@ -1,10 +1,11 @@
 import {app, escape, link, money} from './ui.js';
 import {request} from './api.js';
+import {kindSelect} from './property-kinds.js';
 import {propertyDetail} from './property-detail.js';
 
 const filters = [
   ['q', 'Localização ou imóvel', 'type="search" maxlength="120" placeholder="Cidade, bairro ou código"'],
-  ['kind', 'Tipo de imóvel', 'maxlength="80" placeholder="Ex.: Casa"'],
+  ['kind', 'Tipo de imóvel'],
   ['maxPrice', 'Preço máximo (R$)', 'type="number" min="0" step="0.01" placeholder="Sem limite"'],
   ['bedrooms', 'Mínimo de dormitórios', 'type="number" min="0" max="1000" placeholder="Qualquer"']
 ];
@@ -81,9 +82,10 @@ export async function storefront(params, isCurrent) {
   const gallery = !category && params.get('gallery') === 'true';
   const section = new URLSearchParams(category ? {category} : gallery ? {gallery:'true'} : {});
   const query = next => new URLSearchParams([...section, ...values, ['page', String(next)]]);
-  const [homes, settings] = await Promise.all([
+  const [homes, settings, kinds] = await Promise.all([
     request('/api/imoveis?' + query(page)),
-    request('/api/vitrine/configuracao').catch(() => ({}))
+    request('/api/vitrine/configuracao').catch(() => ({})),
+    request('/api/imoveis/tipos').catch(() => [])
   ]);
   if (!isCurrent()) return;
   showBrand(settings);
@@ -97,8 +99,10 @@ export async function storefront(params, isCurrent) {
     (banner ? '<div class="estate-banner"><img src="' + escape(banner) + '" alt="" fetchpriority="high"></div>' : '') +
     '<div class="estate-hero-copy"><h1>Encontre seu próximo imóvel</h1>' +
     '<form class="estate-search" id="search" aria-label="Filtrar imóveis">' +
-    filters.map(([key,label,attributes]) => '<label>' + label + '<input name="' + key + '" ' +
-      attributes + ' value="' + escape(values.get(key)) + '"></label>').join('') +
+    filters.map(([key,label,attributes]) => '<label>' + label + (key === 'kind'
+      ? kindSelect(kinds, values.get(key), 'Todos os tipos')
+      : '<input name="' + key + '" ' + attributes + ' value="' + escape(values.get(key)) + '">') +
+      '</label>').join('') +
     '<button type="submit">Buscar imóveis</button></form></div></section>' +
     '<section id="resultados" class="estate-results" aria-labelledby="listing-title"><div class="estate-section-head">' +
     '<h2 id="listing-title" tabindex="-1">' + escape(heading) + '</h2>' +

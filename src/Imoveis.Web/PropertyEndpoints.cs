@@ -4,6 +4,7 @@ static class PropertyEndpoints
 {
     public static void Map(RouteGroupBuilder admin)
     {
+        admin.MapGet("/imoveis/tipos", (PropertyStore store, CancellationToken ct) => store.ListKinds(true, ct));
         admin.MapGet("/imoveis", (PropertyStore db, string? q, int? page, CancellationToken ct) =>
             db.Get(true, null, Search(q), Page(page), ct));
         admin.MapGet("/imoveis/{id:guid}", async (Guid id, PropertyStore db, CancellationToken ct) =>

@@ -49,6 +49,20 @@ sealed class PropertyStore(NpgsqlDataSource db)
         return result;
     }
 
+    public async Task<List<string>> ListKinds(bool admin, CancellationToken ct)
+    {
+        await using var command = db.CreateCommand("""
+            SELECT min(kind) FROM properties
+            WHERE (@admin OR status='Publicado') AND btrim(kind) <> ''
+            GROUP BY lower(kind) ORDER BY lower(kind)
+            """);
+        command.Parameters.AddWithValue("admin", admin);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var kinds = new List<string>();
+        while (await reader.ReadAsync(ct)) kinds.Add(reader.GetString(0));
+        return kinds;
+    }
+
     public async Task<int> PublishReadyDrafts(CancellationToken ct)
     {
         await using var command = db.CreateCommand("""
