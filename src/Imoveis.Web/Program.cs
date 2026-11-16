@@ -14,6 +14,7 @@ StorefrontEndpoints.Map(admin);
 MenuEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);
 PdfImportEndpoints.Map(admin);
+app.MapFallbackToFile("/", "index.html", WebStartup.StaticAssets());
 app.MapFallbackToFile("/admin", "index.html", WebStartup.StaticAssets());
 app.MapFallbackToFile("/admin/importacoes", "index.html", WebStartup.StaticAssets());
 

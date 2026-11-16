@@ -19,6 +19,9 @@ async function call(path, method = 'GET', body, expected = 200) {
 }
 const admin = '/api/admin/imoveis';
 await call('/health');
+assert.match(await (await call('/')).text(), /id="app"/);
+assert.match(await (await call('/app.js')).text(), /mountPdfImport/);
+await call('/api/rota-inexistente', 'GET', undefined, 404);
 assert.match(await (await call('/admin/importacoes')).text(), /src="\/app\.js"/);
 await call(admin,'GET',undefined,401);
 await call('/api/admin/login','POST',{username:'admin',password},204);

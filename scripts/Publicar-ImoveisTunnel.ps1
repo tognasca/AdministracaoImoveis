@@ -18,6 +18,21 @@ $project = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     Split-Path -Parent $PSScriptRoot
 }
 
+function Test-Storefront {
+    param([string]$Url)
+    try {
+        $page = Invoke-WebRequest -Uri "$Url/" -UseBasicParsing -TimeoutSec 8
+        $script = Invoke-WebRequest -Uri "$Url/app.js" -UseBasicParsing -TimeoutSec 8
+        $javascript = $script.Content
+        if ($javascript -is [byte[]]) { $javascript = [System.Text.Encoding]::UTF8.GetString($javascript) }
+        return ($page.StatusCode -eq 200 -and $page.Content -match 'id="app"' -and
+            $script.StatusCode -eq 200 -and $javascript -match 'mountPdfImport')
+    } catch {
+        Write-Warning "Falha ao carregar a vitrine em ${Url}: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 if (!(Test-Path -LiteralPath (Join-Path $project 'compose.yaml') -PathType Leaf)) {
     throw "Arquivo compose.yaml ausente em '$project'. Entre na pasta AdministracaoImoveis e rode o script novamente."
 }
@@ -117,6 +132,9 @@ try {
         docker compose --env-file .env logs --tail=60 web
         throw "O Imoveis nao respondeu em $origin/health. O tunel ainda nao foi alterado."
     }
+    if (!(Test-Storefront $origin)) {
+        throw "O /health local respondeu, mas a vitrine em $origin falhou. O tunel ainda nao foi alterado."
+    }
     $identity = Invoke-RestMethod -Uri "$origin/api/vitrine/configuracao" -TimeoutSec 8
     if (!$identity.name) { throw 'A resposta local nao corresponde ao Imoveis.' }
 
@@ -144,6 +162,7 @@ try {
         if (Wait-Health $url 6) { Write-Host "OK $url/health" -ForegroundColor Green }
         else { Write-Warning "Ainda sem resposta em $url/health. Confira DNS e o servico Cloudflared e teste novamente." }
     }
+    if (Test-Storefront "https://$site") { Write-Host "OK https://$site/" -ForegroundColor Green }
     Get-Service -Name Cloudflared
 } finally {
     $env:IMOVEIS_PORT = $previousPort

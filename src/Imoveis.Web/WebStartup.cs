@@ -85,7 +85,6 @@ static class WebStartup
             }
             await next();
         });
-        app.UseDefaultFiles();
         app.UseStaticFiles(StaticAssets());
         app.UseRouting();
         app.UseRateLimiter();
