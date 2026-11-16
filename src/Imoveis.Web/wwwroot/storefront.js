@@ -41,7 +41,11 @@ function showBrand(settings) {
     return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
   });
   const luminance = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
-  const darkText = settings.textColor === 'black' || (settings.textColor !== 'white' && luminance > .179);
+  const blackContrast = (luminance + .05) / .05;
+  const whiteContrast = 1.05 / (luminance + .05);
+  let darkText = blackContrast >= whiteContrast;
+  if (settings.textColor === 'black' && blackContrast >= 4.5) darkText = true;
+  if (settings.textColor === 'white' && whiteContrast >= 4.5) darkText = false;
   document.body.style.setProperty('--estate-accent', color);
   document.body.style.setProperty('--estate-on-accent', darkText ? '#000' : '#fff');
   document.body.style.setProperty('--estate-accent-shade', darkText ? '#fff' : '#000');

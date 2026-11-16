@@ -25,9 +25,9 @@
 .property-thumbnails img { display: block; width: 100%; aspect-ratio: 1.65; object-fit: cover; }
 .property-inquiry {
   position: sticky; top: 24px; min-width: 0; border: 1px solid var(--estate-rule);
-  border-top: 3px solid var(--estate-accent); padding: clamp(17px, 2.6vw, 34px); background: var(--estate-accent); color: var(--estate-on-accent);
+  border-top: 3px solid var(--estate-accent); padding: clamp(17px, 2.6vw, 34px); background: #fffdf8; color: var(--estate-ink);
 }
-.property-price p { color: inherit; font-size: .73rem; letter-spacing: .12em; text-transform: uppercase; }
+.property-price p { color: #526257; font-size: .73rem; letter-spacing: .12em; text-transform: uppercase; }
 .property-price strong { display: block; font: 400 clamp(1.35rem, 2vw, 2rem)/1.08 var(--property-serif); overflow-wrap: anywhere; }
 .property-inquiry .estate-contact { border-top: 1px solid var(--estate-rule); padding-top: 18px; }
 .property-inquiry .estate-contact .btn { justify-content: space-between; gap: 10px; }
@@ -56,4 +56,4 @@
 .property-contact-form textarea { resize: vertical; }
 .property-contact-form .estate-contact { border: 0; padding: 0; margin: 2px 0 0; }
 .property-contact-form .estate-contact .btn { justify-content: center; text-align: center; }
-.property-contact-hint { color: inherit; font-size: .77rem; margin: 0; }
+.property-contact-hint { color: #526257; font-size: .77rem; margin: 0; }

@@ -27,10 +27,11 @@ export async function showSettings(isCurrent) {
     (allowed ? '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
       '<label>Nome do site<input name="siteName" required maxlength="80" value="' + escape(settings.name) + '"></label>' +
       '<label class="theme-color">Cor da vitrine<input name="siteColor" type="color" value="' + escape(settings.color || '#6B5140') + '"></label>' +
-      '<label class="theme-color">Cor do texto<select name="textColor">' +
+      '<label class="theme-color">Texto sobre a cor da vitrine<select name="textColor">' +
       [['auto','Automática'],['black','Preto'],['white','Branco']].map(([value,label]) =>
         '<option value="' + value + '"' + (value === settings.textColor ? ' selected' : '') + '>' + label + '</option>').join('') +
-      '</select></label><div class="grid storefront-contact-settings"><label>E-mail de contato<input name="email" type="email" maxlength="254" value="' +
+      '</select></label><small>Se a combinação escolhida tiver pouco contraste, a vitrine usa a cor de texto mais legível.</small>' +
+      '<div class="grid storefront-contact-settings"><label>E-mail de contato<input name="email" type="email" maxlength="254" value="' +
       escape(settings.email) + '"></label><label>WhatsApp com código do país e DDD<input name="whatsapp" type="tel" inputmode="numeric" ' +
       'pattern="[0-9]{10,15}" maxlength="15" placeholder="5511999999999" value="' + escape(settings.whatsapp) + '"></label></div>' +
       '<div class="row"><button>Salvar identidade</button></div></form></section>' +
