@@ -1,6 +1,6 @@
 static class StorefrontEndpoints
 {
-    private sealed record BrandInput(string? Name);
+    private sealed record BrandInput(string? Name, string? Color);
 
     public static void Map(RouteGroupBuilder admin)
     {
@@ -10,7 +10,10 @@ static class StorefrontEndpoints
             var name = input.Name?.Trim();
             if (name is null || name.Length is < 1 or > 80 || name.Any(char.IsControl))
                 return Results.BadRequest("Informe um nome de site com 1 a 80 caracteres.");
-            await brand.Save(name, ct);
+            var color = input.Color?.Trim();
+            if (color is not null && (color.Length != 7 || color[0] != '#' || !color.Skip(1).All(char.IsAsciiHexDigit)))
+                return Results.BadRequest("Informe uma cor hexadecimal, como #6B5140.");
+            await brand.Save(name, color?.ToUpperInvariant(), ct);
             return Results.NoContent();
         });
         MapImage(storefront, "/banner", StorefrontImage.Banner);

@@ -13,7 +13,8 @@ static class PublicEndpoints
         app.MapGet("/api/vitrine/configuracao", async (IConfiguration settings, StorefrontImages images, StorefrontBrand brand, CancellationToken ct) =>
         {
             var number = settings["Vitrine:WhatsApp"] ?? "";
-            return Results.Ok(new { name = await brand.Read(ct), whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
+            var (name, color) = await brand.Read(ct);
+            return Results.Ok(new { name, color, whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
                 ? number : "", banner = images.Exists(StorefrontImage.Banner) ? "/media/vitrine/banner" : null,
                 logo = images.Exists(StorefrontImage.Logo) ? "/media/vitrine/logo" : null });
         });

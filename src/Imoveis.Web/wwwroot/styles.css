@@ -82,3 +82,6 @@ td input,td select { min-width: 140px; }
   .filter-bar { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .filter-bar label:first-child { grid-column: 1/-1; }
 }
+
+.theme-color { margin-top: 14px; }
+.theme-color input { width: 76px; padding: 4px; cursor: pointer; }

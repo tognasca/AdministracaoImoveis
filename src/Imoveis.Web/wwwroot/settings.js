@@ -26,7 +26,8 @@ export async function showSettings(isCurrent) {
   app.innerHTML = adminNav() + '<h2>Configurações da vitrine</h2>' + notice +
     (allowed ? '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
       '<label>Nome do site<input name="siteName" required maxlength="80" value="' + escape(settings.name) + '"></label>' +
-      '<div class="row"><button>Salvar nome</button></div></form></section>' +
+      '<label class="theme-color">Cor da vitrine<input name="siteColor" type="color" value="' + escape(settings.color || '#6B5140') + '"></label>' +
+      '<div class="row"><button>Salvar identidade</button></div></form></section>' +
       images.map(asset => imageForm(asset, settings[asset.key])).join('') :
       '<p>Acesso restrito a administradores.</p>');
   bindLogout();
@@ -46,7 +47,8 @@ export async function showSettings(isCurrent) {
   brand.onsubmit = event => {
     event.preventDefault();
     const name = brand.elements.siteName.value.trim();
-    change(() => request(endpoint + 'identidade','PUT',{name}), 'Nome do site salvo.');
+    const color = brand.elements.siteColor.value;
+    change(() => request(endpoint + 'identidade','PUT',{name,color}), 'Identidade da vitrine salva.');
   };
 
   for (const {key,label,size} of images) {

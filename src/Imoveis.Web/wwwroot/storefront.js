@@ -33,6 +33,15 @@ function listingCard(home) {
 }
 
 function showBrand(settings) {
+  const color = /^#[0-9a-f]{6}$/i.test(settings.color) ? settings.color : '#6B5140';
+  const channels = color.slice(1).match(/../g).map(value => {
+    const channel = parseInt(value, 16) / 255;
+    return channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4;
+  });
+  const luminance = .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+  document.body.style.setProperty('--estate-accent', color);
+  document.body.style.setProperty('--estate-on-accent', luminance > .179 ? '#000' : '#fff');
+  document.body.style.setProperty('--estate-accent-shade', luminance > .179 ? '#fff' : '#000');
   const name = settings.name || 'Imóveis Cotia';
   const brand = document.querySelector('header .brand');
   document.title = name;
@@ -56,8 +65,7 @@ export async function storefront(params, isCurrent) {
   if (!isCurrent()) return;
   showBrand(settings);
 
-  const featured = homes.find(home => home.photos.length);
-  const banner = settings.banner || (featured ? photoUrl(featured.id, featured.photos[0]) : '');
+  const banner = settings.banner;
   app.innerHTML = '<section class="estate-hero' + (banner ? '' : ' estate-hero-plain') + '">' +
     (banner ? '<div class="estate-banner"><img src="' + escape(banner) + '" alt="" fetchpriority="high"></div>' : '') +
     '<div class="estate-hero-copy"><h1>Encontre seu próximo imóvel</h1>' +
