@@ -46,7 +46,7 @@ O modo Development permite a autenticação por HTTP no endereço local. A porta
 
 ## Importação e usuários
 
-Em **Importações**, escolha XLSX, CSV ou TXT. Selecione a origem, revise o mapeamento e confirme o lote. A primeira aba do XLSX é usada e a primeira linha contém os cabeçalhos. Arquivos delimitados devem ser UTF-8. Uma coluna vazia preserva o conteúdo do cadastro existente. Novos imóveis entram como rascunho. O sistema preserva a identidade, o álbum, as fotos e o estado de publicação dos imóveis atualizados.
+No painel, clique em **Importar arquivo** ou acesse http://localhost:5086/admin/importacoes. Após entrar, escolha XLSX, CSV ou TXT. Selecione a origem, revise o mapeamento e confirme o lote. A primeira aba do XLSX é usada e a primeira linha contém os cabeçalhos. Arquivos delimitados devem ser UTF-8. Uma coluna vazia preserva o conteúdo do cadastro existente. Novos imóveis entram como rascunho. O sistema preserva a identidade, o álbum, as fotos e o estado de publicação dos imóveis atualizados.
 
 O administrador cadastra operadores na tela **Usuários**. Operadores gerenciam imóveis e importações. Apenas administradores gerenciam contas.
 

@@ -19,6 +19,7 @@ async function call(path, method = 'GET', body, expected = 200) {
 }
 const admin = '/api/admin/imoveis';
 await call('/health');
+assert.match(await (await call('/admin/importacoes')).text(), /src="\/app\.js"/);
 await call(admin,'GET',undefined,401);
 await call('/api/admin/login','POST',{username:'admin',password},204);
 const code = 'VALIDACAO-'+Date.now();
