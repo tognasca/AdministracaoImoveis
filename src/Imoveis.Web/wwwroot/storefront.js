@@ -21,17 +21,18 @@ function listingCard(home) {
   const href = '/#imovel/' + encodeURIComponent(home.id);
   const features = facts(d);
   const place = locationLabel(d);
-  const cover = home.photos[0] ? '<img class="listing-image" src="' + escape(photoUrl(home.id, home.photos[0])) +
-    '" alt="" loading="lazy" decoding="async">' :
-    '<div class="listing-image listing-placeholder">Sem foto cadastrada</div>';
+  const photo = home.photos[0];
+  const cover = photo ? '<img class="listing-image" src="' + escape(photoUrl(home.id, photo)) +
+    '" alt="" loading="lazy" decoding="async">' : '<span class="listing-placeholder">Sem foto cadastrada</span>';
   return '<article class="listing-card"><a class="listing-link" href="' + href + '">' +
-    '<div class="listing-cover">' + cover +
-    (d.kind ? '<span class="listing-kind">' + escape(d.kind) + '</span>' : '') + '</div>' +
-    '<div class="listing-body">' + (place ? '<p class="listing-location">' + place + '</p>' : '') +
+    '<div class="listing-cover' + (photo ? '' : ' listing-cover-empty') + '">' + cover +
+    '<div class="listing-caption">' +
+    (d.kind ? '<p class="listing-kind">' + escape(d.kind) + '</p>' : '') +
     '<h3>' + escape(d.title) + '</h3>' +
+    (place ? '<p class="listing-location">' + place + '</p>' : '') + '</div></div>' +
+    '<div class="listing-body"><div class="listing-property-data"><strong>' + money(d.price) + '</strong>' +
     (features.length ? '<ul class="listing-facts">' + features.map(value => '<li>' + value + '</li>').join('') + '</ul>' : '') +
-    '<div class="listing-bottom"><strong>' + money(d.price) + '</strong>' +
-    '<span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></div></a></article>';
+    '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }
 
 function showBrand(settings) {
