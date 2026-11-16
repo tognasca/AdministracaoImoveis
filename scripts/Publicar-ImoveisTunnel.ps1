@@ -12,7 +12,15 @@ $tunnel = 'ddff2357-c88a-4c0e-8645-83a458548735'
 $site = 'imoveis.ademartognasca.com.br'
 $api = 'api-imoveis.ademartognasca.com.br'
 $origin = "http://127.0.0.1:$Porta"
-$project = Split-Path -Parent $PSScriptRoot
+$project = if ([string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    (Get-Location).Path
+} else {
+    Split-Path -Parent $PSScriptRoot
+}
+
+if (!(Test-Path -LiteralPath (Join-Path $project 'compose.yaml') -PathType Leaf)) {
+    throw "Arquivo compose.yaml ausente em '$project'. Entre na pasta AdministracaoImoveis e rode o script novamente."
+}
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 function Invoke-Checked {
