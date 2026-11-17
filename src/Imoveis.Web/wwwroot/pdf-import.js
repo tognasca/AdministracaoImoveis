@@ -2,7 +2,7 @@ import {app, escape, notice, report} from './ui.js';
 import {adminNav, bindLogout} from './admin-ui.js';
 import {request} from './api.js';
 import {prepare} from './imports.js';
-import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes} from './pdf-rows.js';
+import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes, applyPdfCityDefault} from './pdf-rows.js';
 
 const endpoint = '/api/admin/importacoes';
 const columns = [
@@ -45,6 +45,7 @@ export function mountPdfImport(isCurrent) {
         file = upload;
         rows = result.properties.map(row => ({...row, selected:true}));
         await ensurePdfCodes(rows);
+        rows.forEach(row => applyPdfCityDefault(row.data));
         if (!isCurrent()) return;
         information = result.information;
         source = '';
@@ -72,7 +73,7 @@ export function mountPdfImport(isCurrent) {
       'Os códigos ausentes são gerados automaticamente. Confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
       'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
-      '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Pendências de publicação não impedem salvar como rascunho.</p>' +
+      '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Quando o PDF não informa a cidade, usamos São Paulo; você pode alterar. Pendências de publicação não impedem salvar como rascunho.</p>' +
       '<div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
       (body || '<tr><td colspan="14">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
@@ -152,6 +153,7 @@ export function mountPdfImport(isCurrent) {
       try {
         rows.push({...item,selected:true});
         await ensurePdfCodes(rows);
+        applyPdfCityDefault(rows[rows.length-1].data);
         if (!isCurrent()) return;
         edit();
         app.querySelector('tr[data-row="'+(rows.length-1)+'"] input[data-field="code"]').focus();

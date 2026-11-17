@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source = await readFile(new URL('../src/Imoveis.Web/wwwroot/pdf-rows.js',import.meta.url),'utf8');
-const {classifyPdfPages,ensurePdfCodes} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {classifyPdfPages,ensurePdfCodes,applyPdfCityDefault} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const parse = text => classifyPdfPages([text],'generic');
 const line = values => values.map((v,i) => i === values.length-1 ? v : v.padEnd([12,28,20,18,18][i])).join('');
 const header = line(['Código','Título','Bairro','Cidade','Valor']);
@@ -45,3 +45,13 @@ rows.splice(1,1);
 await ensurePdfCodes(rows);
 assert.equal(rows[0].data.code,before);
 console.log('OK: códigos automáticos únicos na grade, preservados e estáveis após mudança de preço.');
+
+for (const [input,expected] of [
+  [{},'São Paulo'],[{city:'   '},'São Paulo'],[{city:'Cotia'},'Cotia'],
+  [{location:'Centro - Osasco/SP'},'Osasco'],[{location:'Centro'},'São Paulo'],
+  [{city:'Cotia',location:'Centro - Osasco/SP'},'Cotia']
+]) {
+  applyPdfCityDefault(input);
+  assert.equal(input.city,expected);
+}
+console.log('OK: cidade padrão São Paulo, preservando cidade explícita ou informada na localização.');

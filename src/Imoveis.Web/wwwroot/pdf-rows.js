@@ -235,3 +235,9 @@ export async function ensurePdfCodes(rows) {
     used.add(code.toLowerCase());
   }
 }
+
+export function applyPdfCityDefault(data) {
+  if (String(data.city ?? '').trim()) return;
+  const location = String(data.location ?? '').match(/^(.+?)\s+-\s+([^/]+)(?:\/\s*[A-Z]{2})?$/i);
+  data.city = location?.[2]?.trim() || 'São Paulo';
+}
