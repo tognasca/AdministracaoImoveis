@@ -4,7 +4,11 @@ const fieldsByLabel = {
   bairro:'district', cidade:'city', municipio:'city', local:'location', localizacao:'location',
   preco:'price', valor:'price', vlvenda:'price', precovenda:'price', valorvenda:'price',
   quartos:'bedrooms', dormitorios:'bedrooms', area:'size', aream2:'size', metragem:'size',
-  obs:'notes', observacoes:'notes', observacao:'notes'
+  obs:'notes', observacoes:'notes', observacao:'notes',
+  empreendimento:'title', nome:'title', dorm:'bedrooms', dorms:'bedrooms',
+  valorimovel:'price', valorr:'price', precor:'price', apartirde:'price',
+  areautil:'size', areautilm2:'size', areaprivativa:'size', areaprivativam2:'size',
+  metragemm2:'size', end:'address', endereco:'address', entrega:'delivery', vagas:'parking'
 };
 
 const field = label => fieldsByLabel[label.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -49,22 +53,40 @@ function classifyGenericPages(pages) {
     for (const raw of page.split(/\r?\n/)) {
       const line = raw.trim();
       if (!line) { flush(); continue; }
-      const cells = line.split(/\s{2,}|\s*\|\s*|\s*;\s*/);
-      const mapped = cells.map(field);
-      const recognized = mapped.filter(Boolean);
-      if (recognized.length >= 2 && recognized.includes('code') && new Set(recognized).size === recognized.length) {
+      const detected = readTableHeader(raw);
+      if (detected) {
         flush();
-        header = mapped;
+        header = detected;
         information.push({page:index + 1,text:line,data:{}});
         continue;
       }
-      if (header && cells.length === header.length && cells[header.indexOf('code')]) {
-        const data = Object.fromEntries(header.flatMap((key, i) => key && cells[i] ? [[key,cells[i]]] : []));
-        if (/^[\w.-]+$/.test(data.code) && (data.title || data.kind || /\d/.test(data.price ?? ''))) {
+      if (header && !/^[-+|;=\s]+$/.test(line)) {
+        const cells = tableCells(raw,header);
+        const data = {};
+        header.columns.forEach((column,i) => {
+          if (column.key && cells[i]) data[column.key] = cells[i];
+        });
+        const numericPrice = /^(?:R\$\s*)?\d[\d.,\s]*$/.test(data.price ?? '');
+        const codedRow = /^[\w.-]+$/.test(data.code ?? '') && (data.title || data.kind);
+        if ((numericPrice && (data.title || data.kind || data.code || data.size)) ||
+            (!data.price && codedRow)) {
           flush();
+          for (const key of ['price','size']) {
+            if (data[key]) {
+              const value = data[key].replace(/R\$|m[²2]|\s/g, '');
+              data[key] = catalogNumber(value) || data[key];
+            }
+          }
+          const extras = header.columns.flatMap((column,i) =>
+            cells[i] && (!column.key || ['address','delivery','parking'].includes(column.key)) ?
+              [column.label + ': ' + cells[i]] : []);
+          for (const key of ['address','delivery','parking']) delete data[key];
+          if (extras.length) data.notes = [data.notes,...extras].filter(Boolean).join('\n');
           properties.push({page:index + 1,text:line,data});
           continue;
         }
+        // A text block ends the table; never reuse its column positions for prose.
+        if (!/^[-+|;=\s]+$/.test(line)) header = null;
       }
       if (block.length && (/^(?:ref\.?|c[oó]d(?:igo)?\.?)\s*[:#]/i.test(line) || propertyTitle.test(line))) {
         const prior = readPdfBlock(block.join('\n'));
@@ -75,6 +97,32 @@ function classifyGenericPages(pages) {
     flush();
   });
   return {properties,information};
+}
+
+// pdftotext -layout preserves column positions, including empty cells.
+function readTableHeader(raw) {
+  const delimiter = raw.includes('|') ? '|' : raw.includes(';') ? ';' : null;
+  let columns;
+  if (delimiter) {
+    columns = raw.trim().split(delimiter).map(label => ({label:label.trim(),key:field(label.trim())}));
+  } else {
+    columns = [...raw.matchAll(/\S(?:.*?\S)?(?=\s{2,}|$)/g)]
+      .map(match => ({label:match[0],key:field(match[0]),start:match.index}));
+  }
+  const keys = columns.map(column => column.key).filter(Boolean);
+  if (keys.length < 2 || new Set(keys).size !== keys.length ||
+      !(keys.includes('price') || keys.includes('code')) || !keys.some(key => ['code','title','kind','size'].includes(key))) return null;
+  return {delimiter,columns};
+}
+
+function tableCells(raw,header) {
+  if (header.delimiter) {
+    const cells = raw.trim().split(header.delimiter).map(cell => cell.trim());
+    return cells.length === header.columns.length ? cells : [];
+  }
+  // Boundaries follow the header, so a missing cell never shifts later values.
+  return header.columns.map((column,i) => raw.slice(i ? column.start : 0,
+    header.columns[i+1]?.start).trim());
 }
 
 export function pdfRowCells(data, mapping) {

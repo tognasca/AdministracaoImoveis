@@ -22,8 +22,8 @@ export function mountPdfImport(isCurrent) {
   function choose(message = '') {
     shell('<form id="pdf-upload" class="box"><label>Arquivo PDF<input name="file" type="file" accept=".pdf,application/pdf" required></label>' +
       '<label>Modelo de leitura<select name="model"><option value="auto">Identificar automaticamente</option>' +
-      '<option value="kallas">Tabelão de empreendimentos Kallas e Kazzas</option><option value="generic">Tabelas com código e texto corrido</option></select></label>' +
-      '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas.</p><button>Extrair texto</button></form>');
+      '<option value="kallas">Tabelão de empreendimentos Kallas e Kazzas</option><option value="generic">Tabelas por cabeçalho e texto corrido</option></select></label>' +
+      '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas. Nas tabelas, os cabeçalhos orientam o preenchimento: Valor → Preço, Metragem → Área, Dorms → Dormitórios. Confira os valores na grade antes de importar.</p><button>Extrair texto</button></form>');
     if (message) report(message);
     const form = app.querySelector('#pdf-upload');
     form.onsubmit = async event => {
