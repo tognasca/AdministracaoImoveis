@@ -4,6 +4,8 @@ import {request} from './api.js';
 import {prepare} from './imports.js';
 import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes, applyPdfCityDefault} from './pdf-rows.js';
 
+import {excel} from './import-files.js';
+import {pdfWorkbook, pdfCorrections} from './pdf-excel.js';
 import {zoneSelect} from './property-zones.js';
 
 const endpoint = '/api/admin/importacoes';
@@ -23,11 +25,14 @@ export function mountPdfImport(isCurrent) {
     bindLogout();
   }
   function choose(message = '') {
+    file = undefined; rows = []; information = []; source = ''; model = 'generic';
     shell('<form id="pdf-upload" class="box"><label>Arquivo PDF<input name="file" type="file" accept=".pdf,application/pdf" required></label>' +
       '<label>Modelo de leitura<select name="model"><option value="auto">Identificar automaticamente</option>' +
       '<option value="kallas">Tabelão de empreendimentos Kallas e Kazzas</option><option value="generic">Tabelas por cabeçalho e texto corrido</option></select></label>' +
-      '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas. Nas tabelas, os cabeçalhos orientam o preenchimento: Valor → Preço, Metragem → Área, Dorms → Dormitórios. Confira os valores na grade antes de importar.</p><button>Extrair texto</button></form>');
+      '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas. Nas tabelas, os cabeçalhos orientam o preenchimento: Valor → Preço, Metragem → Área, Dorms → Dormitórios. Confira os valores na grade antes de importar.</p><button>Extrair texto</button></form>' +
+      '<section class="box"><h3>Retomar uma revisão pelo Excel</h3><label>Excel corrigido (.xlsx)<input id="pdf-corrected" type="file" accept=".xlsx"></label><p class="muted">Use a planilha exportada nesta tela para continuar a conferência.</p></section>');
     if (message) report(message);
+    app.querySelector('#pdf-corrected').onchange = event => loadCorrections(event.target.files[0]);
     const form = app.querySelector('#pdf-upload');
     form.onsubmit = async event => {
       event.preventDefault();
@@ -57,6 +62,28 @@ export function mountPdfImport(isCurrent) {
     };
   }
 
+  async function loadCorrections(upload) {
+    if (!upload || busy) return;
+    if (!/\.xlsx$/i.test(upload.name) || upload.size > 8_000_000) {
+      report('Selecione o Excel corrigido (.xlsx) de até 8 MB.'); return;
+    }
+    busy = true;
+    const controls = [...app.querySelectorAll('input,select,textarea,button')];
+    controls.forEach(control => { control.disabled = true; });
+    try {
+      const corrected = pdfCorrections(await excel(upload),rows,columns);
+      await ensurePdfCodes(corrected.rows);
+      corrected.rows.forEach(row => applyPdfCityDefault(row.data));
+      if (!isCurrent()) return;
+      rows = corrected.rows;
+      source = corrected.source || source;
+      if (!file) { file = upload; information = []; model = 'generic'; }
+      edit();
+      report('Excel carregado: '+rows.length+' linha(s). Confira as pendências antes de importar.');
+    } catch (error) { if (isCurrent()) report(error.message); }
+    finally { busy = false; controls.forEach(control => { control.disabled = false; }); }
+  }
+
   function edit() {
     const previousGrid = app.querySelector('.pdf-grid');
     const scrollPosition = {top:previousGrid?.scrollTop ?? 0,left:previousGrid?.scrollLeft ?? 0};
@@ -76,6 +103,7 @@ export function mountPdfImport(isCurrent) {
       'Os códigos ausentes são gerados automaticamente. Confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
       'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
+      '<section class="box"><h3>Corrigir no Excel</h3><div class="row"><button type="button" class="alt" id="pdf-export">Exportar para Excel</button><label>Carregar Excel corrigido<input id="pdf-corrected" type="file" accept=".xlsx"></label></div><p class="muted">Edite a aba Imóveis e salve como .xlsx. Ao carregar, a planilha substitui esta grade. A gravação acontece somente após a conferência.</p></section>' +
       '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Quando o PDF não informa a cidade, usamos São Paulo; você pode alterar. Pendências de publicação não impedem salvar como rascunho.</p>' +
       '<div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
@@ -87,6 +115,26 @@ export function mountPdfImport(isCurrent) {
         escape(item.text)+'</pre><button type="button" class="alt" data-promote="'+index+'">Usar na grade</button></div>').join('') :
         '<p>Nenhum trecho separado.</p>') + '</details>');
     const form = app.querySelector('#pdf-review');
+    app.querySelector('#pdf-corrected').onchange = event => loadCorrections(event.target.files[0]);
+    app.querySelector('#pdf-export').onclick = async () => {
+      if (busy) return;
+      busy = true;
+      const button = app.querySelector('#pdf-export');
+      button.disabled = true;
+      try {
+        await ensurePdfCodes(rows);
+        if (!isCurrent()) return;
+        rows.forEach(row => { row.exchangeId ||= crypto.randomUUID(); });
+        updateIssues();
+        const bytes = pdfWorkbook(rows,information,columns,source);
+        const url = URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+        const anchor = Object.assign(document.createElement('a'),{href:url,download:'revisao-'+file.name.replace(/\.[^.]+$/,'')+'.xlsx'});
+        anchor.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+        report('Excel exportado. Corrija a aba Imóveis e use Carregar Excel corrigido.');
+      } catch (error) { if (isCurrent()) report(error.message); }
+      finally { busy = false; button.disabled = false; }
+    };
     const grid = app.querySelector('.pdf-grid'), scrollbar = app.querySelector('.pdf-scrollbar');
     const resizeScroll = () => { scrollbar.firstElementChild.style.width = grid.querySelector('table').scrollWidth+'px'; };
     scrollbar.onscroll = () => { if (grid.scrollLeft !== scrollbar.scrollLeft) grid.scrollLeft = scrollbar.scrollLeft; };
