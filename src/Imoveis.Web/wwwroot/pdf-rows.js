@@ -207,11 +207,31 @@ function classifyKallasPages(pages) {
           'Dormitórios ou suítes no PDF: ' + rooms.trim(),
           'Vagas no PDF: ' + parking.trim(),
           'Preço a partir de, sujeito à confirmação de disponibilidade.',
-          'Preencher código e confirmar cidade antes de publicar.'
+          'Confirmar cidade e dados antes de publicar.'
         ].join('\n')
       };
       properties.push({page:index+1,text:project.name+'\nEntrega: '+project.delivery+'\n'+project.address+'\n'+line,data});
     }
   });
   return {properties,information};
+}
+
+// A stable identity allows importing the same option again after its price changes.
+export async function ensurePdfCodes(rows) {
+  const used = new Set(rows.map(row => String(row.data.code ?? '').trim().toLowerCase()).filter(Boolean));
+  for (const row of rows) {
+    if (String(row.data.code ?? '').trim()) continue;
+    const data = row.data;
+    const address = (data.notes ?? '').match(/(?:Endereço informado|Endereço):\s*([^\n]+)/i)?.[1] ?? '';
+    const identity = [data.title,data.kind,data.district,data.city,data.location,data.size,data.bedrooms,address]
+      .map(value => String(value ?? '').trim().toLowerCase().normalize('NFC'));
+    if (!identity.some(Boolean)) identity.push(row.text ?? crypto.randomUUID());
+    const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(identity)));
+    const base = 'PDF-'+Array.from(new Uint8Array(digest).slice(0,10),v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
+    let code = base, suffix = 2;
+    while (used.has(code.toLowerCase())) code = base+'-'+suffix++;
+    data.code = code;
+    row.generatedCode = true;
+    used.add(code.toLowerCase());
+  }
 }

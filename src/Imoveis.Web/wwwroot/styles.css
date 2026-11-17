@@ -128,3 +128,17 @@ td input,td select { min-width: 140px; }
 .pdf-grid details { min-width: 100px; max-width: 250px; }
 .pdf-information summary, .pdf-grid summary { cursor: pointer; }
 .pdf-fragment { padding: 14px 0; border-bottom: 1px solid var(--line); }
+
+/* Keep both axes within reach while reviewing long PDFs. */
+.pdf-scrollbar { overflow-x: auto; height: 22px; border: 1px solid var(--line); border-bottom: 0; background: white; }
+.pdf-scrollbar > div { height: 1px; }
+.pdf-grid { max-height: 65vh; overflow: auto; padding: 0; border-radius: 0 0 10px 10px; }
+.pdf-grid thead th { position: sticky; top: 0; z-index: 2; background: #f2f4f0; box-shadow: 0 1px 0 var(--line); }
+.pdf-grid td { vertical-align: top; }
+.pdf-grid .pdf-delete { width: 34px; height: 34px; min-height: 34px; padding: 0; border: 1px solid #eadcd7; border-radius: 7px; background: transparent; color: #9b4939; }
+.pdf-grid .pdf-delete:hover { background: #fbeeea; filter: none; }
+.pdf-grid .pdf-row-review { min-width: 210px; max-width: 300px; font-size: .8rem; }
+.pdf-row-review ul { padding-left: 16px; margin: 7px 0 0; color: #794c16; }
+.pdf-review-badge { display: inline-block; border-radius: 20px; padding: 3px 9px; color: #794c16; background: #fff0cf; font-weight: 600; }
+.pdf-ready { color: #285f46; }
+.pdf-grid .pdf-needs-review { border-color: #b87725; background: #fffbef; }

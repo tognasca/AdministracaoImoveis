@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source = await readFile(new URL('../src/Imoveis.Web/wwwroot/pdf-rows.js',import.meta.url),'utf8');
-const {classifyPdfPages} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {classifyPdfPages,ensurePdfCodes} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const parse = text => classifyPdfPages([text],'generic');
 const line = values => values.map((v,i) => i === values.length-1 ? v : v.padEnd([12,28,20,18,18][i])).join('');
 const header = line(['Código','Título','Bairro','Cidade','Valor']);
@@ -30,3 +30,18 @@ result = classifyPdfPages([catalog]);
 assert.equal(result.model,'kallas');
 assert.equal(result.properties[0].data.price,'240000.00');
 console.log('OK: cabeçalhos, colunas vazias/reordenadas, números BR/US, observações, texto livre e modelo Kallas.');
+
+const original = {title:'Jardim — 24m²',kind:'Apartamento',size:'24',bedrooms:'1',price:'240000'};
+const rows = [{data:{...original}},{data:{...original}},{data:{code:'ORIGINAL-1',...original}}];
+await ensurePdfCodes(rows);
+assert.match(rows[0].data.code,/^PDF-[A-F0-9]{20}$/);
+assert.equal(rows[1].data.code,rows[0].data.code+'-2');
+assert.equal(rows[2].data.code,'ORIGINAL-1');
+const changedPrice = [{data:{...original,price:'260000'}}];
+await ensurePdfCodes(changedPrice);
+assert.equal(changedPrice[0].data.code,rows[0].data.code);
+const before = rows[0].data.code;
+rows.splice(1,1);
+await ensurePdfCodes(rows);
+assert.equal(rows[0].data.code,before);
+console.log('OK: códigos automáticos únicos na grade, preservados e estáveis após mudança de preço.');

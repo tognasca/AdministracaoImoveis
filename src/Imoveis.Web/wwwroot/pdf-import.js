@@ -2,7 +2,7 @@ import {app, escape, notice, report} from './ui.js';
 import {adminNav, bindLogout} from './admin-ui.js';
 import {request} from './api.js';
 import {prepare} from './imports.js';
-import {classifyPdfPages, pdfRowCells, readPdfBlock} from './pdf-rows.js';
+import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes} from './pdf-rows.js';
 
 const endpoint = '/api/admin/importacoes';
 const columns = [
@@ -14,8 +14,9 @@ const mapping = columns.map(([key]) => key);
 
 export function mountPdfImport(isCurrent) {
   let file, rows = [], information = [], source = '', model = 'generic';
-  let busy = false;
+  let busy = false, scrollObserver;
   function shell(content) {
+    scrollObserver?.disconnect();
     app.innerHTML = adminNav() + '<h2>Tratar PDF de imóveis</h2>' + notice + content;
     bindLogout();
   }
@@ -43,6 +44,8 @@ export function mountPdfImport(isCurrent) {
         if (result.properties.length > 1000) throw Error('O PDF tem mais de 1.000 imóveis candidatos. Divida o arquivo.');
         file = upload;
         rows = result.properties.map(row => ({...row, selected:true}));
+        await ensurePdfCodes(rows);
+        if (!isCurrent()) return;
         information = result.information;
         source = '';
         edit();
@@ -52,8 +55,10 @@ export function mountPdfImport(isCurrent) {
   }
 
   function edit() {
+    const previousGrid = app.querySelector('.pdf-grid');
+    const scrollPosition = {top:previousGrid?.scrollTop ?? 0,left:previousGrid?.scrollLeft ?? 0};
     const body = rows.map((row,index) => '<tr data-row="'+index+'"><td><input type="checkbox" data-field="selected" ' +
-      (row.selected ? 'checked ' : '') + 'aria-label="Incluir registro '+(index+1)+'"></td><td><button type="button" class="alt" data-delete-row aria-label="Excluir registro '+(index+1)+'">Excluir</button></td><td>' +
+      (row.selected ? 'checked ' : '') + 'aria-label="Incluir registro '+(index+1)+'"></td><td><button type="button" class="pdf-delete" title="Excluir linha" data-delete-row aria-label="Excluir registro '+(index+1)+'"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></td><td class="pdf-row-review"></td><td>' +
       (row.page ? '<details><summary>Pág. '+row.page+'</summary><pre>'+escape(row.text)+'</pre></details>' : 'Manual') + '</td>' +
       columns.map(([key,label,limit]) => {
         const attributes = ' data-field="'+key+'" maxlength="'+limit+'" aria-label="'+label+' do registro '+(index+1)+'"';
@@ -64,12 +69,13 @@ export function mountPdfImport(isCurrent) {
     shell('<form id="pdf-review"><section class="box"><h3>'+escape(file.name)+'</h3>' +
       '<label>Origem dos códigos<input name="source" required maxlength="100" value="'+escape(source)+'"></label>' +
       (model === 'kallas' ? '<p class="notice">Modelo Kallas e Kazzas. Cada metragem e preço corresponde a uma opção de empreendimento. ' +
-      'Preencha um código estável por opção e confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
+      'Os códigos ausentes são gerados automaticamente. Confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
       'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
-      '<h3>Imóveis candidatos</h3><div class="box table pdf-grid"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Origem no PDF</th>' +
+      '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Pendências de publicação não impedem salvar como rascunho.</p>' +
+      '<div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
-      (body || '<tr><td colspan="13">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
+      (body || '<tr><td colspan="14">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
       '</tbody></table></div><div class="row"><button type="button" class="alt" id="pdf-back">Trocar PDF</button>' +
       '<button type="button" class="alt" id="pdf-add">Adicionar linha</button><button id="pdf-check">Conferir antes de importar</button></div></form>' +
       '<details class="box pdf-information"><summary>Trechos informativos ('+information.length+')</summary>' +
@@ -77,6 +83,46 @@ export function mountPdfImport(isCurrent) {
         escape(item.text)+'</pre><button type="button" class="alt" data-promote="'+index+'">Usar na grade</button></div>').join('') :
         '<p>Nenhum trecho separado.</p>') + '</details>');
     const form = app.querySelector('#pdf-review');
+    const grid = app.querySelector('.pdf-grid'), scrollbar = app.querySelector('.pdf-scrollbar');
+    const resizeScroll = () => { scrollbar.firstElementChild.style.width = grid.querySelector('table').scrollWidth+'px'; };
+    scrollbar.onscroll = () => { if (grid.scrollLeft !== scrollbar.scrollLeft) grid.scrollLeft = scrollbar.scrollLeft; };
+    grid.onscroll = () => { if (scrollbar.scrollLeft !== grid.scrollLeft) scrollbar.scrollLeft = grid.scrollLeft; };
+    scrollObserver = new ResizeObserver(resizeScroll);
+    scrollObserver.observe(grid);
+    resizeScroll();
+    grid.scrollTop = scrollPosition.top;
+    grid.scrollLeft = scrollbar.scrollLeft = scrollPosition.left;
+    function updateIssues() {
+      const active = rows.filter(row => row.selected);
+      const previews = prepare(active.map(row => pdfRowCells(row.data,mapping)),mapping,[],source);
+      let needsReview = 0;
+      rows.forEach((row,index) => {
+        const preview = row.selected ? previews[active.indexOf(row)] : null;
+        const issues = [];
+        if (preview?.status === 'Revisar') issues.push(preview.note);
+        const missing = ['kind','city','price'].filter(key => !String(row.data[key] ?? '').trim() ||
+          (key === 'price' && Number(String(row.data[key]).replace(/R\$|[.\s]/g,'').replace(',','.')) === 0));
+        const hasLocationCity = /\s+-\s+[^/]+(?:\/\s*[A-Z]{2})?$/i.test(row.data.location ?? '');
+        if (hasLocationCity && missing.includes('city')) missing.splice(missing.indexOf('city'),1);
+        if (missing.length) issues.push('Para publicar: '+missing.map(key => columns.find(column => column[0] === key)[1]).join(', '));
+        if (!row.data.size && /\d+\s+a\s+\d+.*m[²2]/i.test(row.text ?? '')) issues.push('Conferir área: intervalo no PDF');
+        if (row.selected && issues.length) needsReview++;
+        const tr = grid.querySelector('[data-row="'+index+'"]');
+        tr.querySelector('.pdf-row-review').innerHTML = !row.selected ? '<span class="muted">Fora da importação</span>' :
+          issues.length ? '<span class="pdf-review-badge">Revisar</span><ul>'+issues.map(issue => '<li>'+escape(issue)+'</li>').join('')+'</ul>' : '<span class="pdf-ready">Pronto para conferir</span>';
+        tr.querySelectorAll('[data-field]').forEach(input => {
+          const key = input.dataset.field;
+          const label = columns.find(column => column[0] === key)?.[1];
+          input.classList.toggle('pdf-needs-review',Boolean(row.selected && (missing.includes(key) ||
+            (key === 'size' && issues.some(issue => issue.startsWith('Conferir área'))) ||
+            (label && preview?.status === 'Revisar' && preview.note.toLowerCase().includes(label.toLowerCase())))));
+          if (key === 'code') input.value = row.data.code ?? '';
+          if (key === 'code') input.title = row.generatedCode ? 'Código gerado automaticamente; você pode editar.' : '';
+        });
+      });
+      app.querySelector('#pdf-review-summary').textContent = active.length+' selecionado(s) · '+needsReview+' com pendências para revisar';
+    }
+    updateIssues();
     form.oninput = event => {
       if (event.target.name === 'source') source = event.target.value;
       const row = event.target.closest('tr[data-row]');
@@ -84,7 +130,8 @@ export function mountPdfImport(isCurrent) {
       const item = rows[Number(row.dataset.row)];
       const key = event.target.dataset.field;
       if (key === 'selected') item.selected = event.target.checked;
-      else if (key) item.data[key] = event.target.value;
+      else if (key) { item.data[key] = event.target.value; if (key === 'code') item.generatedCode = false; }
+      updateIssues();
     };
     form.onclick = event => {
       const button = event.target.closest('[data-delete-row]');
@@ -98,12 +145,18 @@ export function mountPdfImport(isCurrent) {
       report('Linha removida da revisão.');
     };
     app.querySelector('#pdf-back').onclick = () => { if (!busy && window.confirm('Trocar o PDF e descartar a revisão atual?')) choose(); };
-    function insert(item) {
+    async function insert(item) {
       if (busy) return;
       if (rows.length >= 1000) { report('O limite desta revisão é 1.000 linhas.'); return; }
-      rows.push({...item,selected:true});
-      edit();
-      app.querySelector('tr[data-row="'+(rows.length-1)+'"] input[data-field="code"]').focus();
+      busy = true;
+      try {
+        rows.push({...item,selected:true});
+        await ensurePdfCodes(rows);
+        if (!isCurrent()) return;
+        edit();
+        app.querySelector('tr[data-row="'+(rows.length-1)+'"] input[data-field="code"]').focus();
+      } catch (error) { if (isCurrent()) report(error.message); }
+      finally { busy = false; }
     }
     app.querySelector('#pdf-add').onclick = () => insert({data:{}});
     app.querySelector('.pdf-information').onclick = event => {
@@ -118,12 +171,15 @@ export function mountPdfImport(isCurrent) {
       source = form.elements.source.value.trim();
       const selected = rows.filter(row => row.selected);
       if (!selected.length || !source) { report('Informe a origem e selecione os imóveis que serão conferidos.'); return; }
-      const cells = selected.map(row => pdfRowCells(row.data,mapping));
-      const codes = [...new Set(cells.map(cell => cell[0].trim()).filter(code => code.length && code.length <= 80))];
       const controls = [...app.querySelectorAll('#pdf-review input, #pdf-review textarea, #pdf-review button, [data-promote]')];
       busy = true;
       controls.forEach(control => { control.disabled = true; });
       try {
+        await ensurePdfCodes(rows);
+        if (!isCurrent()) return;
+        updateIssues();
+        const cells = selected.map(row => pdfRowCells(row.data,mapping));
+        const codes = [...new Set(cells.map(cell => cell[0].trim()).filter(code => code.length && code.length <= 80))];
         const prior = await request(endpoint+'/conferencia','POST',{source,codes});
         if (isCurrent()) review(prepare(cells,mapping,prior,source), selected);
       } catch (error) { if (isCurrent()) report(error.message); }
