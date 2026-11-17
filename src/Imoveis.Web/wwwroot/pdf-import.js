@@ -13,7 +13,7 @@ const columns = [
 const mapping = columns.map(([key]) => key);
 
 export function mountPdfImport(isCurrent) {
-  let file, rows = [], information = [], source = '';
+  let file, rows = [], information = [], source = '', model = 'generic';
   let busy = false;
   function shell(content) {
     app.innerHTML = adminNav() + '<h2>Tratar PDF de imóveis</h2>' + notice + content;
@@ -21,6 +21,8 @@ export function mountPdfImport(isCurrent) {
   }
   function choose(message = '') {
     shell('<form id="pdf-upload" class="box"><label>Arquivo PDF<input name="file" type="file" accept=".pdf,application/pdf" required></label>' +
+      '<label>Modelo de leitura<select name="model"><option value="auto">Identificar automaticamente</option>' +
+      '<option value="kallas">Tabelão de empreendimentos Kallas e Kazzas</option><option value="generic">Tabelas com código e texto corrido</option></select></label>' +
       '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas.</p><button>Extrair texto</button></form>');
     if (message) report(message);
     const form = app.querySelector('#pdf-upload');
@@ -36,7 +38,8 @@ export function mountPdfImport(isCurrent) {
         body.append('file',upload);
         const {pages} = await request(endpoint+'/pdf/extrair','POST',body);
         if (!isCurrent()) return;
-        const result = classifyPdfPages(pages);
+        const result = classifyPdfPages(pages,form.elements.model.value);
+        model = result.model;
         if (result.properties.length > 1000) throw Error('O PDF tem mais de 1.000 imóveis candidatos. Divida o arquivo.');
         file = upload;
         rows = result.properties.map(row => ({...row, selected:true}));
@@ -60,6 +63,9 @@ export function mountPdfImport(isCurrent) {
       }).join('') + '</tr>').join('');
     shell('<form id="pdf-review"><section class="box"><h3>'+escape(file.name)+'</h3>' +
       '<label>Origem dos códigos<input name="source" required maxlength="100" value="'+escape(source)+'"></label>' +
+      (model === 'kallas' ? '<p class="notice">Modelo Kallas e Kazzas. Cada metragem e preço corresponde a uma opção de empreendimento. ' +
+      'Preencha um código estável por opção e confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
+      'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
       '<h3>Imóveis candidatos</h3><div class="box table pdf-grid"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +

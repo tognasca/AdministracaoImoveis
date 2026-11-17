@@ -25,7 +25,13 @@ export function readPdfBlock(text) {
   return data;
 }
 
-export function classifyPdfPages(pages) {
+export function classifyPdfPages(pages, model = 'auto') {
+  const selected = model === 'auto' ? detectPdfModel(pages) : model;
+  const result = selected === 'kallas' ? classifyKallasPages(pages) : classifyGenericPages(pages);
+  return {...result, model:selected};
+}
+
+function classifyGenericPages(pages) {
   const properties = [], information = [];
   pages.forEach((page, index) => {
     let header = null;
@@ -76,4 +82,88 @@ export function pdfRowCells(data, mapping) {
     const value = String(data[key] ?? '');
     return key === 'size' ? value.replace(/\s*m(?:²|2)\s*$/i, '') : value;
   });
+}
+
+const projectPattern = /^(.+?)\s{2,}((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}|PRONTO)\s{2,}(.+)$/i;
+const optionPattern = /^(.*?)\s{2,}(.*?)\s{2,}(.*?)\s+R\$\s*([\d.,]+)/i;
+
+export function detectPdfModel(pages) {
+  const text = pages.join('\n');
+  return /\b(?:KALLAS|KAZZAS)\b/i.test(text) &&
+    /Empreend\./i.test(text) && /A partir de/i.test(text) ? 'kallas' : 'generic';
+}
+
+function catalogNumber(value) {
+  if (/^\d{1,3}(?:,\d{3})+\.\d{2}$/.test(value) || /^\d+\.\d{2}$/.test(value))
+    return value.replaceAll(',', '');
+  if (/^\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(value) || /^\d+,\d{1,2}$/.test(value))
+    return value.replaceAll('.', '').replace(',', '.');
+  return /^\d+$/.test(value) ? value : '';
+}
+
+function classifyKallasPages(pages) {
+  const properties = [], information = [];
+  let project = null;
+  pages.forEach((page, index) => {
+    let pendingMetadata = null;
+    let pendingName = '';
+    for (const raw of page.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      if (/Empreend\..*Entrega.*Endere[cç]o/i.test(line)) {
+        project = null;
+        pendingMetadata = null;
+        pendingName = '';
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      const dateOnly = line.match(/^((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}|PRONTO)\s{2,}(.+)$/i);
+      if (dateOnly) {
+        pendingMetadata = {delivery:dateOnly[1],address:dateOnly[2].trim()};
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      if (/METRAGEM.*DORMS.*VAGAS/i.test(line) && pendingMetadata) {
+        if (pendingName) project = {name:pendingName,...pendingMetadata};
+        pendingMetadata = null;
+      } else if (pendingMetadata) {
+        pendingName = line;
+      }
+      const metadata = line.match(projectPattern);
+      if (metadata) {
+        project = {name:metadata[1].trim(), delivery:metadata[2], address:metadata[3].trim()};
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      const option = line.match(optionPattern);
+      if (!option || !project || !/m\s*[²2]/i.test(option[1])) {
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      const [, variant, rooms, parking, price] = option;
+      const area = variant.match(/^(\d[\d.,]*)\s*m\s*[²2]/i);
+      const amount = catalogNumber(price);
+      const kind = /loja/i.test(variant + ' ' + rooms) ? 'Loja' :
+        /cobertura/i.test(variant) ? 'Cobertura' : /studio/i.test(rooms) ? 'Studio' : 'Apartamento';
+      const data = {
+        title:project.name + ' — ' + variant.trim(),
+        kind,
+        price:amount || price,
+        size:area ? catalogNumber(area[1]) : '',
+        bedrooms:rooms.match(/^\d+/)?.[0] ?? '',
+        notes:[
+          'Empreendimento: ' + project.name,
+          'Entrega informada: ' + project.delivery,
+          'Endereço informado: ' + project.address,
+          'Opção: ' + variant.trim(),
+          'Dormitórios ou suítes no PDF: ' + rooms.trim(),
+          'Vagas no PDF: ' + parking.trim(),
+          'Preço a partir de, sujeito à confirmação de disponibilidade.',
+          'Preencher código e confirmar cidade antes de publicar.'
+        ].join('\n')
+      };
+      properties.push({page:index+1,text:project.name+'\nEntrega: '+project.delivery+'\n'+project.address+'\n'+line,data});
+    }
+  });
+  return {properties,information};
 }
