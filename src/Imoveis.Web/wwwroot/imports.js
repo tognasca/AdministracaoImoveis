@@ -1,11 +1,12 @@
+import {normalizeZone, standardZones} from './property-zones.js';
 import {delimited, excel} from './import-files.js';
 
 const endpoint = '/api/admin/importacoes';
 const labels = {code:'Código do imóvel',title:'Título',kind:'Tipo de imóvel',bedrooms:'Dormitórios',
-  district:'Bairro',city:'Cidade',location:'Bairro e cidade',price:'Preço',size:'Área (m²)',notes:'Observações'};
+  district:'Bairro',city:'Cidade',zone:'Zona',location:'Bairro e cidade',price:'Preço',size:'Área (m²)',notes:'Observações'};
 const aliases = {code:['codigo','cod','id','codigoimovel'],title:['titulo','nome','descricao'],
   kind:['ctipo','tipoimovel','tipo'],bedrooms:['dormitorio','dormitorios','dormitoriosquanto','quartos'],
-  district:['bairro'],city:['cidade','municipio'],location:['local','localizacao'],
+  district:['bairro'],city:['cidade','municipio'],zone:['zona','regiao','zonacidade'],location:['local','localizacao'],
   price:['valor','preco','vlvenda','precovenda'],size:['area','aream2','metragem'],notes:['observacao','observacoes','obs','notas']};
 const normalize = value => String(value ?? '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -42,6 +43,10 @@ export function prepare(rows,mapping,existing,source) {
         patch.district ??= (match?.[1] ?? value).trim();
         if (match) patch.city ??= match[2].trim();
         return;
+      }
+      if (field === 'zone') {
+        value = normalizeZone(value);
+        if (!standardZones.includes(value)) errors.push('Zona inválida');
       }
       if (field === 'kind') value = ({apto:'Apartamento',apartamento:'Apartamento',casa:'Casa',
         terreno:'Terreno',sobrado:'Sobrado'})[normalize(value)] ?? value;

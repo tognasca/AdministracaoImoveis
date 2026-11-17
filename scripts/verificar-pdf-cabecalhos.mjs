@@ -55,3 +55,30 @@ for (const [input,expected] of [
   assert.equal(input.city,expected);
 }
 console.log('OK: cidade padrão São Paulo, preservando cidade explícita ou informada na localização.');
+
+const zonesSource = await readFile(new URL('../src/Imoveis.Web/wwwroot/property-zones.js',import.meta.url),'utf8');
+const {normalizeZone,zoneSelect,standardZones} = await import('data:text/javascript;base64,'+Buffer.from(zonesSource).toString('base64'));
+assert.equal(normalizeZone('Z.L.'),'Zona Leste');
+assert.equal(normalizeZone('oeste'),'Zona Oeste');
+assert.equal(normalizeZone('Zona Central'),'Centro');
+assert.equal(standardZones.length,5);
+assert.match(zoneSelect('leste'),/value="Zona Leste" selected/);
+assert.ok(!zoneSelect('<script>').includes('<script>'));
+result = parse('Código | Tipo | Zona | Valor\nIM-10 | Casa | Oeste | 500000');
+assert.equal(result.properties[0].data.zone,'Oeste');
+result = classifyPdfPages(['ZONA SUL\n'+catalog]);
+assert.equal(result.properties[0].data.zone,'Zona Sul');
+console.log('OK: opções da zona, aliases, dropdown seguro e leitura da seção Kallas.');
+
+const importsSource = (await readFile(new URL('../src/Imoveis.Web/wwwroot/imports.js',import.meta.url),'utf8'))
+  .replace("'./property-zones.js'",JSON.stringify('data:text/javascript;base64,'+Buffer.from(zonesSource).toString('base64')))
+  .replace("import {delimited, excel} from './import-files.js';",'');
+const {prepare} = await import('data:text/javascript;base64,'+Buffer.from(importsSource).toString('base64'));
+const zonePreview = prepare([['Z-1','Casa','Z.L.'],['Z-2','Casa','Inválida']],['code','title','zone'],[],'Teste');
+assert.equal(zonePreview[0].data.zone,'Zona Leste');
+assert.equal(zonePreview[1].status,'Revisar');
+const priorZone = [{id:'teste',data:{code:'Z-1',title:'Casa',zone:'Zona Oeste'}}];
+assert.equal(prepare([['Z-1','Casa']],['code','title'],priorZone,'Teste')[0].data.zone,'Zona Oeste');
+const centerCatalog = catalog.replace('METRAGEM  DORMS','CENTRO\nMETRAGEM  DORMS');
+assert.equal(classifyPdfPages([centerCatalog]).properties.length,1);
+console.log('OK: zona válida na prévia e preservada ao atualizar sem coluna; Centro não elimina o empreendimento.');

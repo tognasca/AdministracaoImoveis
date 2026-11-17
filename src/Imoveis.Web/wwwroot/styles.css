@@ -142,3 +142,5 @@ td input,td select { min-width: 140px; }
 .pdf-review-badge { display: inline-block; border-radius: 20px; padding: 3px 9px; color: #794c16; background: #fff0cf; font-weight: 600; }
 .pdf-ready { color: #285f46; }
 .pdf-grid .pdf-needs-review { border-color: #b87725; background: #fffbef; }
+
+.pdf-grid select { min-width: 160px; }

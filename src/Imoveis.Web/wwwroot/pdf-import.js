@@ -4,10 +4,12 @@ import {request} from './api.js';
 import {prepare} from './imports.js';
 import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes, applyPdfCityDefault} from './pdf-rows.js';
 
+import {zoneSelect} from './property-zones.js';
+
 const endpoint = '/api/admin/importacoes';
 const columns = [
   ['code','Código',80], ['title','Título',160], ['kind','Tipo',80], ['district','Bairro',100],
-  ['city','Cidade',100], ['location','Bairro e cidade',200], ['price','Preço',32],
+  ['city','Cidade',100], ['zone','Zona',40], ['location','Bairro e cidade',200], ['price','Preço',32],
   ['bedrooms','Dormitórios',24], ['size','Área (m²)',32], ['notes','Observações internas',2000]
 ];
 const mapping = columns.map(([key]) => key);
@@ -64,6 +66,7 @@ export function mountPdfImport(isCurrent) {
       columns.map(([key,label,limit]) => {
         const attributes = ' data-field="'+key+'" maxlength="'+limit+'" aria-label="'+label+' do registro '+(index+1)+'"';
         const value = escape(row.data[key]);
+        if (key === 'zone') return '<td>'+zoneSelect(row.data.zone,attributes)+'</td>';
         return key === 'notes' ? '<td><textarea rows="2"'+attributes+'>'+value+'</textarea></td>' :
           '<td><input'+attributes+' value="'+value+'"></td>';
       }).join('') + '</tr>').join('');
@@ -76,7 +79,7 @@ export function mountPdfImport(isCurrent) {
       '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Quando o PDF não informa a cidade, usamos São Paulo; você pode alterar. Pendências de publicação não impedem salvar como rascunho.</p>' +
       '<div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
-      (body || '<tr><td colspan="14">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
+      (body || '<tr><td colspan="15">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
       '</tbody></table></div><div class="row"><button type="button" class="alt" id="pdf-back">Trocar PDF</button>' +
       '<button type="button" class="alt" id="pdf-add">Adicionar linha</button><button id="pdf-check">Conferir antes de importar</button></div></form>' +
       '<details class="box pdf-information"><summary>Trechos informativos ('+information.length+')</summary>' +
@@ -173,7 +176,7 @@ export function mountPdfImport(isCurrent) {
       source = form.elements.source.value.trim();
       const selected = rows.filter(row => row.selected);
       if (!selected.length || !source) { report('Informe a origem e selecione os imóveis que serão conferidos.'); return; }
-      const controls = [...app.querySelectorAll('#pdf-review input, #pdf-review textarea, #pdf-review button, [data-promote]')];
+      const controls = [...app.querySelectorAll('#pdf-review input, #pdf-review textarea, #pdf-review select, #pdf-review button, [data-promote]')];
       busy = true;
       controls.forEach(control => { control.disabled = true; });
       try {

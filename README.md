@@ -83,3 +83,5 @@ Na grade de tratamento do PDF, a coluna **Revisão** mostra erros de importaçã
 Quando não há código no PDF, a revisão gera um código `PDF-…` antes da conferência. O código original é preservado. A sugestão usa os dados de identificação da opção, sem o preço; opções idênticas na mesma revisão recebem sufixos. Alterações nesses dados ou na ordem de opções idênticas podem mudar a sugestão em uma nova extração: confira a prévia ao reimportar.
 
 No tratamento de PDF, a cidade ausente recebe **São Paulo** como padrão editável. Cidades explícitas ou identificadas em uma localização como `Centro - Cotia/SP` são preservadas. A regra também vale ao adicionar linhas ou usar trechos na grade.
+
+O campo **Zona** possui lista com Centro, Zona Norte, Zona Sul, Zona Leste e Zona Oeste, além de Não informada. Está disponível no cadastro e na grade do PDF, é salvo no imóvel e aparece nas características do anúncio. Importações reconhecem a coluna Zona/Região; no tabelão Kallas e Kazzas, os títulos de zona são aplicados às opções da seção. A zona pode ser corrigida na grade antes da importação.

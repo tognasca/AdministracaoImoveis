@@ -1,7 +1,7 @@
 const fieldsByLabel = {
   codigo:'code', cod:'code', referencia:'code', ref:'code', codigoimovel:'code',
   titulo:'title', imovel:'title', descricao:'title', tipo:'kind', tipoimovel:'kind', ctipo:'kind',
-  bairro:'district', cidade:'city', municipio:'city', local:'location', localizacao:'location',
+  bairro:'district', zona:'zone', regiao:'zone', zonacidade:'zone', cidade:'city', municipio:'city', local:'location', localizacao:'location',
   preco:'price', valor:'price', vlvenda:'price', precovenda:'price', valorvenda:'price',
   quartos:'bedrooms', dormitorios:'bedrooms', area:'size', aream2:'size', metragem:'size',
   obs:'notes', observacoes:'notes', observacao:'notes',
@@ -151,13 +151,25 @@ function catalogNumber(value) {
 
 function classifyKallasPages(pages) {
   const properties = [], information = [];
-  let project = null;
+  let project = null, zone = '';
   pages.forEach((page, index) => {
     let pendingMetadata = null;
     let pendingName = '';
     for (const raw of page.split(/\r?\n/)) {
       const line = raw.trim();
       if (!line) continue;
+      const region = line.match(/^ZONA\s+(NORTE|SUL|LESTE|OESTE)$|^(CENTRO)$/i);
+      if (region) {
+        zone = region[2] ? 'Centro' : 'Zona '+region[1][0].toUpperCase()+region[1].slice(1).toLowerCase();
+        // Centro may be the district below the current project, rather than a new section.
+        if (!region[2]) {
+          project = null;
+          pendingMetadata = null;
+          pendingName = '';
+        }
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
       if (/Empreend\..*Entrega.*Endere[cç]o/i.test(line)) {
         project = null;
         pendingMetadata = null;
@@ -195,6 +207,7 @@ function classifyKallasPages(pages) {
         /cobertura/i.test(variant) ? 'Cobertura' : /studio/i.test(rooms) ? 'Studio' : 'Apartamento';
       const data = {
         title:project.name + ' — ' + variant.trim(),
+        ...(zone ? {zone} : {}),
         kind,
         price:amount || price,
         size:area ? catalogNumber(area[1]) : '',

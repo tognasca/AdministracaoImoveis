@@ -66,6 +66,7 @@ export function propertyDetail(home, settings, locationText) {
   const d = home.data;
   const facts = [
     ['Tipo de imóvel', d.kind],
+    ['Zona', d.zone],
     ['Dormitórios', d.bedrooms > 0 ? d.bedrooms : ''],
     ['Área informada', d.size > 0 ? Number(d.size).toLocaleString('pt-BR') + ' m²' : ''],
     ['Localização', [d.district, d.city].filter(Boolean).join(' · ')]

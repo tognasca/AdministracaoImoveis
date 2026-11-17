@@ -1,7 +1,7 @@
 using Npgsql;
 
 record PropertyInput(string Code, string Source, string Title, string Kind, string District, string City,
-    decimal Price, int Bedrooms, decimal Size, string Status, string? Album, int Version, Guid? CategoryId = null, string? Notes = null);
+    decimal Price, int Bedrooms, decimal Size, string Status, string? Album, int Version, Guid? CategoryId = null, string? Notes = null, string? Zone = null);
 record Property(Guid Id, PropertyInput Data, Guid[] Photos);
 
 sealed class PropertyStore(NpgsqlDataSource db)
@@ -9,7 +9,7 @@ sealed class PropertyStore(NpgsqlDataSource db)
     private const string Columns = """
         p.id, p.code, p.source, p.title, p.kind, p.district, p.city, p.price, p.bedrooms,
         p.size, p.status, p.album, p.version, p.category_id, CASE WHEN @admin THEN p.notes END,
-        ARRAY(SELECT id FROM photos WHERE property_id=p.id ORDER BY slot)
+        ARRAY(SELECT id FROM photos WHERE property_id=p.id ORDER BY slot), p.zone
         """;
 
     public async Task<List<Property>> Get(bool admin, Guid? id, string search, int page, CancellationToken ct, string kind = "", decimal maxPrice = 0, int bedrooms = 0, Guid? category = null, bool gallery = false)
@@ -17,7 +17,7 @@ sealed class PropertyStore(NpgsqlDataSource db)
         await using var command = db.CreateCommand($"""
             SELECT {Columns} FROM properties p
             WHERE (@admin OR status='Publicado') AND (@all OR p.id=@id)
-              AND (@search='' OR concat_ws(' ',title,city,district,code) ILIKE @pattern)
+              AND (@search='' OR concat_ws(' ',title,city,district,zone,code) ILIKE @pattern)
               AND (@kind='' OR lower(kind)=lower(@kind))
               AND (@max_price=0 OR price<=@max_price)
               AND (@bedrooms=0 OR bedrooms>=@bedrooms)
@@ -45,7 +45,8 @@ sealed class PropertyStore(NpgsqlDataSource db)
                 reader.GetDecimal(7), reader.GetInt32(8), reader.GetDecimal(9), reader.GetString(10),
                 reader.IsDBNull(11) ? null : reader.GetString(11), reader.GetInt32(12),
                 reader.IsDBNull(13) ? null : reader.GetGuid(13),
-                reader.IsDBNull(14) ? null : reader.GetString(14)), reader.GetFieldValue<Guid[]>(15)));
+                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(16) ? null : reader.GetString(16)), reader.GetFieldValue<Guid[]>(15)));
         return result;
     }
 
@@ -83,11 +84,12 @@ sealed class PropertyStore(NpgsqlDataSource db)
         NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct)
     {
         await using var command = new NpgsqlCommand(create ? """
-            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes)
-            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''))
+            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone)
+            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''))
             """ : """
             UPDATE properties SET code=@code,source=@source,title=@title,kind=@kind,district=@district,
                 city=@city,price=@price,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,
+                zone=CASE WHEN @zone IS NULL THEN zone ELSE NULLIF(@zone,'') END,
                 notes=CASE WHEN @notes IS NULL THEN notes ELSE NULLIF(@notes,'') END,version=version+1
             WHERE id=@id AND version=@version
             """, connection, transaction);
@@ -107,6 +109,8 @@ sealed class PropertyStore(NpgsqlDataSource db)
         command.Parameters.AddWithValue("category", NpgsqlTypes.NpgsqlDbType.Uuid, (object?)input.CategoryId ?? DBNull.Value);
         command.Parameters.AddWithValue("notes", NpgsqlTypes.NpgsqlDbType.Text,
             (object?)input.Notes?.Trim() ?? DBNull.Value);
+        command.Parameters.AddWithValue("zone", NpgsqlTypes.NpgsqlDbType.Text,
+            (object?)input.Zone?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("version", input.Version);
         return await command.ExecuteNonQueryAsync(ct) == 1;
     }

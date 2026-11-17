@@ -3,11 +3,12 @@ import {request} from './api.js';
 import {adminNav, bindLogout} from './admin-ui.js';
 import {menuEndpoint} from './menu.js';
 import {kindSelect, standardKinds} from './property-kinds.js';
+import {zoneSelect} from './property-zones.js';
 import {mountGallery} from './gallery.js';
 
 const fields = [
   ['code','Código',80],['source','Origem',100],['title','Título',160],['kind','Tipo de imóvel',80],
-  ['district','Bairro',100],['city','Cidade',100],['price','Preço (R$)',0],['bedrooms','Dormitórios',0],
+  ['district','Bairro',100],['city','Cidade',100],['zone','Zona',40],['price','Preço (R$)',0],['bedrooms','Dormitórios',0],
   ['size','Área (m²)',0],['album','Link externo do álbum',2048]
 ];
 const statuses = ['Rascunho','Publicado','Vendido','Retirado'];
@@ -23,7 +24,7 @@ export async function editor(id, isCurrent) {
     ? 'Publicado na vitrine. ' + link('Ver anúncio', 'imovel/' + id, true)
     : 'Este imóvel está fora da vitrine. Para publicar, preencha cidade, tipo e preço.';
   const sections = [
-    ['Identificação e localização', ['code','source','title','kind','district','city']],
+    ['Identificação e localização', ['code','source','title','kind','district','city','zone']],
     ['Características e preço', ['price','bedrooms','size']],
     ['Publicação', ['album']]
   ];
@@ -33,7 +34,7 @@ export async function editor(id, isCurrent) {
     menu.filter(item => item.kind === 'category').map(item => '<option value="' + escape(item.id) + '"' +
       (item.id === d.categoryId ? ' selected' : '') + '>' + escape(item.name) + (item.visible ? '' : ' (oculta no menu)') +
       '</option>').join('') + '</select></label>';
-  const field = ([key,label,length]) => key === 'kind'
+  const field = ([key,label,length]) => key === 'zone' ? '<label>'+label+zoneSelect(d.zone)+'</label>' : key === 'kind'
     ? '<label>' + label + kindSelect([...standardKinds, ...kinds], d.kind, 'Selecione o tipo') + '</label>' :
     '<label>' + label + '<input name="' + key + '" value="' + escape(d[key]) + '" ' +
     (length ? 'maxlength="' + length + '" type="' + (key === 'album' ? 'url' : 'text') + '"' :
