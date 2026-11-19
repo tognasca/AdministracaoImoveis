@@ -25,6 +25,8 @@ const admin = '/api/admin/imoveis';
 await call('/health');
 assert.match(await (await call('/')).text(), /id="app"/);
 const assets = '/api/vitrine/recursos';
+assert.match(await (await call("/")).text(), /"\/api\/vitrine\/recursos\/js\/crm\.js": "\/api\/vitrine\/recursos\/js\/crm"/);
+assert.match(await (await call(assets + "/js/crm")).text(), /export async function crm/);
 for (const name of ['styles', 'storefront', 'property-detail']) {
   const response = await call(assets + '/css/' + name);
   assert.match(response.headers.get('content-type'), /^text\/css/);
