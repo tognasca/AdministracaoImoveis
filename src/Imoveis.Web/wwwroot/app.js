@@ -9,6 +9,7 @@ import {storefront, details} from './storefront.js';
 import {editor} from './editor.js';
 import {manageMenu} from './menu.js';
 import {staff} from './staff.js';
+import {crm} from './crm.js';
 
 const menuToggle = document.querySelector('#public-menu-toggle');
 const publicHeader = menuToggle.closest('header');
@@ -36,7 +37,7 @@ async function render() {
   const [path,query] = location.hash.slice(1).split('?');
   const directRoute = {'/admin':'admin','/admin/importacoes':'importar'}[location.pathname.replace(/\/$/,'')];
   const [route,id] = (path || directRoute || '').split('/');
-  const adminRoute = ['admin','editar','importar','pdf','usuarios','configuracoes','menu'].includes(route);
+  const adminRoute = ['admin','editar','importar','pdf','usuarios','configuracoes','menu','crm'].includes(route);
   document.body.classList.toggle('estate-site', !adminRoute);
   app.innerHTML = '<p>Carregando…</p>';
   window.scrollTo(0, 0);
@@ -46,7 +47,9 @@ async function render() {
       if (!isCurrent()) return;
       setSession(currentSession);
     }
-    if (route === 'menu') {
+    if (route === 'crm') {
+      await crm(isCurrent);
+    } else if (route === 'menu') {
       await manageMenu(isCurrent);
     } else if (route === 'configuracoes') {
       await showSettings(isCurrent);
