@@ -58,6 +58,7 @@ sealed class PropertyStore(NpgsqlDataSource db)
             WHERE tenant_id=@tenant AND (@admin OR status='Publicado') AND btrim(kind) <> ''
             GROUP BY lower(kind) ORDER BY lower(kind)
             """);
+        command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         command.Parameters.AddWithValue("admin", admin);
         await using var reader = await command.ExecuteReaderAsync(ct);
         var kinds = new List<string>();
