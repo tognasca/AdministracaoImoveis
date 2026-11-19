@@ -41,7 +41,10 @@ jobs:
           node scripts/verificar-importacao-2.mjs
           node scripts/verificar-pdf-cabecalhos.mjs
           node scripts/verificar-pdf-excel.mjs
-      - name: Boot API and apply all database migrations
+      - name: Prepare the disposable database at the previous schema version
+        run: |
+          node scripts/preparar-migracao-legada.mjs | docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U imoveis -d imoveis_ci
+      - name: Boot API and apply pending database migrations
         env:
           Admin__Password: ci_admin_password_long_enough_2026
           ConnectionStrings__Imoveis: Host=localhost;Port=5432;Database=imoveis_ci;Username=imoveis;Password=imoveis_ci_password
@@ -65,6 +68,7 @@ jobs:
       - name: Verify API regressions on the disposable database
         env:
           IMOVEIS_URL: http://127.0.0.1:5099
+          IMOVEIS_EXPECT_LEGACY_FIXTURE: '1'
           IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026
         run: node scripts/verificar-integracao.mjs
       - name: Show API logs on failure

@@ -35,6 +35,15 @@ await call('/api/rota-inexistente', 'GET', undefined, 404);
 assert.match(await (await call('/admin/importacoes')).text(), /src="\/api\/vitrine\/recursos\/js\/app"/);
 await call(admin,'GET',undefined,401);
 await call(login,'POST',{username:'admin',password},204);
+if (process.env.IMOVEIS_EXPECT_LEGACY_FIXTURE === '1') {
+  const legacy = await call('/api/imoveis/00000000-0000-4000-8000-000000000071');
+  assert.equal(legacy.data.code,'LEG-1');
+  assert.equal(legacy.data.categoryId,'00000000-0000-4000-8000-000000000001');
+  assert.equal((await call('/api/vitrine/configuracao')).name,'Imobiliária anterior');
+  assert.equal((await call('/api/admin/importacoes/modelos/'+'c'.repeat(64)))[0].source,'Cadastro anterior');
+  const entry = (await call('/api/admin/importacoes/historico')).find(item=>item.filename==='anterior.csv');
+  assert.equal(await (await call('/api/admin/importacoes/historico/'+entry.id+'/arquivo')).text(),'ABC');
+}
 const code = 'VALIDACAO-'+Date.now();
 const adminCookie = cookie;
 const users = '/api/admin/usuarios';

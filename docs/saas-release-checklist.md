@@ -26,7 +26,8 @@ domínios e administrador inicial de novas imobiliárias. O bootstrap por
 ## Validação de liberação
 
 - O workflow executa build .NET 10, testes de parsers, inicialização com as
-  migrações em PostgreSQL 17, regressão da instalação original e testes HTTP
+  migrações em PostgreSQL 17 sobre o esquema anterior, preservação de registros
+  legados, regressão da instalação original e testes HTTP
   de acesso cruzado entre dois domínios em banco descartável.
 - Antes de liberar clientes, validar a atualização e a restauração com uma
   cópia representativa do banco e da mídia da instalação, o proxy HTTPS e o
