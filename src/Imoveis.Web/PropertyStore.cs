@@ -77,26 +77,27 @@ sealed class PropertyStore(NpgsqlDataSource db)
         return await command.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<bool> Save(Guid id, PropertyInput input, bool create, CancellationToken ct)
+    public async Task<bool> Save(Guid id, PropertyInput input, bool create, CancellationToken ct, Guid tenantId)
     {
         await using var connection = await db.OpenConnectionAsync(ct);
-        return await Save(id, input, create, connection, null, ct);
+        return await Save(id, input, create, connection, null, ct, tenantId);
     }
 
     public static async Task<bool> Save(Guid id, PropertyInput input, bool create,
-        NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct)
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct, Guid tenantId)
     {
         await using var command = new NpgsqlCommand(create ? """
-            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone)
-            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''))
+            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone,tenant_id)
+            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''),@tenant)
             """ : """
             UPDATE properties SET code=@code,source=@source,title=@title,kind=@kind,district=@district,
                 city=@city,price=@price,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,
                 zone=CASE WHEN @zone IS NULL THEN zone ELSE NULLIF(@zone,'') END,
                 notes=CASE WHEN @notes IS NULL THEN notes ELSE NULLIF(@notes,'') END,version=version+1
-            WHERE id=@id AND version=@version
+            WHERE id=@id AND tenant_id=@tenant AND version=@version
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("tenant", tenantId);
         command.Parameters.AddWithValue("code", input.Code.Trim());
         command.Parameters.AddWithValue("source", input.Source.Trim());
         command.Parameters.AddWithValue("title", input.Title.Trim());

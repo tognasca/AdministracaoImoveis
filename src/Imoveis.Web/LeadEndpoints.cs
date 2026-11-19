@@ -60,7 +60,7 @@ static class LeadEndpoints
                   AND (@assigned IS NULL OR EXISTS
                     (SELECT 1 FROM staff_users WHERE id=@assigned AND tenant_id=@tenant AND active))
                 """);
-            Bind(command,id,input);
+            Bind(command,id,input,tenant.Id);
             return await command.ExecuteNonQueryAsync(ct)==1
                 ? Results.NoContent() : Results.NotFound();
         });

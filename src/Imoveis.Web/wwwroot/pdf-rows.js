@@ -147,7 +147,9 @@ export function detectPdfModel(pages) {
   // project / delivery / address / variant layout under different branding.
   const headers = (text.match(/Empreend\.?[^\n]*Entrega[^\n]*Endere[cç]o/gi) ?? []).length;
   const variants = (text.match(/(?:Metragem|[ÁA]rea)[^\n]*(?:Dorms?|Quartos?)[^\n]*Vagas?/gi) ?? []).length;
-  return headers >= 2 && variants >= 2 ? 'catalog' : 'generic';
+  if (headers >= 2 && variants >= 2) return 'catalog';
+  if (headers && variants && /\b(?:kallas|kazzas)\b/i.test(text)) return 'kallas';
+  return 'generic';
 }
 
 function catalogNumber(value) {

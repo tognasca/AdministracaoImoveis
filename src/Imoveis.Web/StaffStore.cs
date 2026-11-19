@@ -21,12 +21,13 @@ sealed class StaffStore(NpgsqlDataSource db)
         await query.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<StaffUser?> Verify(string? username, string? password, CancellationToken ct)
+    public async Task<StaffUser?> Verify(string? username, string? password, CancellationToken ct, Guid tenantId)
     {
         if (string.IsNullOrWhiteSpace(username) || username.Length > 80 || password is null || password.Length > 256) return null;
         await using var query = db.CreateCommand("""
-            SELECT id,username,role,active,password_hash FROM staff_users WHERE lower(username)=lower(@username)
+            SELECT id,username,role,active,password_hash FROM staff_users WHERE tenant_id=@tenant AND lower(username)=lower(@username)
             """);
+        query.Parameters.AddWithValue("tenant", tenantId);
         query.Parameters.AddWithValue("username", username.Trim());
         await using var reader = await query.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;

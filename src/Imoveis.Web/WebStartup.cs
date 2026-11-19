@@ -39,11 +39,12 @@ static class WebStartup
             options.Events.OnValidatePrincipal = async context =>
             {
                 var identity = context.Principal;
+                var tenant = context.HttpContext.RequestServices.GetRequiredService<TenantContext>();
                 var staff = context.HttpContext.RequestServices.GetRequiredService<StaffStore>();
                 if (!Guid.TryParse(identity?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-                    || await staff.Find(id, context.HttpContext.RequestAborted) is not { Active: true } user
-                    || !identity!.IsInRole(user.Role)
-                    || TenantContext.AuthenticatedTenant(identity) != TenantContext.LegacyId)
+                    || TenantContext.AuthenticatedTenant(identity!) != tenant.Id
+                    || await staff.Find(id, context.HttpContext.RequestAborted, tenant.Id) is not { Active: true } user
+                    || !identity!.IsInRole(user.Role))
                     context.RejectPrincipal();
             };
             options.Events.OnRedirectToAccessDenied = context =>

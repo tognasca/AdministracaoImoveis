@@ -36,11 +36,19 @@ jobs:
         run: dotnet build src/Imoveis.Web/Imoveis.Web.csproj --configuration Release
       - name: Validate SaaS structural prerequisites
         run: node scripts/check-saas-readiness.mjs
+      - name: Verify PDF and Excel parsers
+        run: |
+          node scripts/verificar-importacao-2.mjs
+          node scripts/verificar-pdf-cabecalhos.mjs
+          node scripts/verificar-pdf-excel.mjs
       - name: Boot API and apply all database migrations
         env:
           Admin__Password: ci_admin_password_long_enough_2026
           ConnectionStrings__Imoveis: Host=localhost;Port=5432;Database=imoveis_ci;Username=imoveis;Password=imoveis_ci_password
           ASPNETCORE_URLS: http://127.0.0.1:5099
+          ASPNETCORE_ENVIRONMENT: Development
+          Saas__LegacyHostnames: imoveis-ci.test
+          Media__Path: /tmp/imoveis-ci-media
         run: |
           dotnet run --no-build --configuration Release --project src/Imoveis.Web/Imoveis.Web.csproj > /tmp/imoveis-ci.log 2>&1 &
           echo $! > /tmp/imoveis-ci.pid
@@ -51,3 +59,14 @@ jobs:
           done
           cat /tmp/imoveis-ci.log
           exit 1
+      - name: Seed inaccessible records from a second tenant
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U imoveis -d imoveis_ci < scripts/fixtures-saas-isolation.sql
+      - name: Verify API regressions on the disposable database
+        env:
+          IMOVEIS_URL: http://127.0.0.1:5099
+          IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026
+        run: node scripts/verificar-integracao.mjs
+      - name: Show API logs on failure
+        if: failure()
+        run: cat /tmp/imoveis-ci.log

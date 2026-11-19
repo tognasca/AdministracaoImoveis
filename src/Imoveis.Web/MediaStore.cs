@@ -7,7 +7,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
 
     private string FilePath(Guid property, Guid photo) => Path.Combine(root, property.ToString("N"), photo.ToString("N"));
 
-    public async Task<int> Add(Guid property, IFormFile file, CancellationToken ct)
+    public async Task<int> Add(Guid property, IFormFile file, CancellationToken ct, Guid tenantId)
     {
         if (file.Length is <= 0 or > MaxBytes) return 413;
         await using var stream = file.OpenReadStream();
@@ -18,7 +18,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         stream.Position = 0;
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
-        if (!await LockProperty(connection, tx, property, ct)) return 404;
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return 404;
         await using var find = new NpgsqlCommand("""
             SELECT n FROM generate_series(0,4) AS n
             WHERE NOT EXISTS (SELECT 1 FROM photos WHERE property_id=@property AND slot=n)
@@ -74,11 +74,11 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         catch (DirectoryNotFoundException) { return Results.NotFound(); }
     }
 
-    public async Task<bool> Remove(Guid property, Guid id, CancellationToken ct)
+    public async Task<bool> Remove(Guid property, Guid id, CancellationToken ct, Guid tenantId)
     {
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
-        if (!await LockProperty(connection, tx, property, ct)) return false;
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return false;
         await using var command = new NpgsqlCommand(
             "DELETE FROM photos WHERE property_id=@property AND id=@id", connection, tx);
         command.Parameters.AddWithValue("property", property);
@@ -89,11 +89,11 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         return true;
     }
 
-    public async Task<bool> SetCover(Guid property, Guid id, CancellationToken ct)
+    public async Task<bool> SetCover(Guid property, Guid id, CancellationToken ct, Guid tenantId)
     {
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
-        if (!await LockProperty(connection, tx, property, ct)) return false;
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return false;
         await using var command = new NpgsqlCommand("""
             WITH chosen AS (SELECT slot FROM photos WHERE property_id=@property AND id=@id),
                  first AS (SELECT min(slot) AS slot FROM photos WHERE property_id=@property)
@@ -108,10 +108,11 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         return true;
     }
 
-    private static async Task<bool> LockProperty(NpgsqlConnection connection, NpgsqlTransaction tx, Guid property, CancellationToken ct)
+    private static async Task<bool> LockProperty(NpgsqlConnection connection, NpgsqlTransaction tx, Guid property, CancellationToken ct, Guid tenantId)
     {
-        await using var command = new NpgsqlCommand("SELECT 1 FROM properties WHERE id=@id FOR UPDATE", connection, tx);
+        await using var command = new NpgsqlCommand("SELECT 1 FROM properties WHERE id=@id AND tenant_id=@tenant FOR UPDATE", connection, tx);
         command.Parameters.AddWithValue("id", property);
+        command.Parameters.AddWithValue("tenant", tenantId);
         return await command.ExecuteScalarAsync(ct) is not null;
     }
 
