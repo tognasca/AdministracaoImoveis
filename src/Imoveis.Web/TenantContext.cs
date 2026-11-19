@@ -21,7 +21,7 @@ static class TenantResolver
         var allowed = configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var legacy = host is "localhost" or "127.0.0.1" or "::1"
             || allowed.Any(x => string.Equals(x, host, StringComparison.OrdinalIgnoreCase));
-        if (!legacy)
+        if (allowed.Length > 0 && !legacy)
         {
             // A verified domain can resolve, but is not served until all data paths are isolated.
             // This prevents custom domains from accidentally seeing the legacy catalog.
