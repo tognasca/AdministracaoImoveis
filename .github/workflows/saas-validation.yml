@@ -1,0 +1,26 @@
+name: SaaS branch validation
+on:
+  push:
+    branches: [feature/importacao-inteligente-2-0]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - '.github/workflows/saas-validation.yml'
+permissions:
+  contents: read
+jobs:
+  build-and-static-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compile ASP.NET Core
+        run: dotnet build src/Imoveis.Web/Imoveis.Web.csproj --configuration Release
+      - name: Validate SaaS structural prerequisites
+        run: node scripts/check-saas-readiness.mjs
