@@ -14,7 +14,7 @@ static class SessionEndpoints
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Role, user.Role),
-                new Claim("tenant_id", "00000000-0000-4000-8000-000000000001")
+                new Claim("tenant_id", ctx.RequestServices.GetRequiredService<TenantContext>().Id.ToString())
                 ], CookieAuthenticationDefaults.AuthenticationScheme);
             await ctx.SignInAsync(new ClaimsPrincipal(identity));
             return Results.NoContent();
