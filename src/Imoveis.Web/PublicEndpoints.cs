@@ -28,7 +28,7 @@ static class PublicEndpoints
         });
         app.MapGet("/media/vitrine/banner", (StorefrontImages images, CancellationToken ct) => images.Read(StorefrontImage.Banner, ct));
         app.MapGet("/media/vitrine/logo", (StorefrontImages images, CancellationToken ct) => images.Read(StorefrontImage.Logo, ct));
-        app.MapGet("/media/{property:guid}/{photo:guid}", (Guid property, Guid photo, HttpContext ctx, MediaStore media, CancellationToken ct) =>
-            media.Read(property, photo, ctx.User.Identity?.IsAuthenticated == true, ct));
+        app.MapGet("/media/{property:guid}/{photo:guid}", (Guid property, Guid photo, HttpContext ctx, MediaStore media, TenantContext tenant, CancellationToken ct) =>
+            media.Read(property, photo, ctx.User.Identity?.IsAuthenticated == true && TenantContext.AuthenticatedTenant(ctx.User) == tenant.Id, ct, tenant.Id));
     }
 }
