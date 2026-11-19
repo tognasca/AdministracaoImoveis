@@ -22,10 +22,15 @@ function imageForm({key,title,label}, url) {
 export async function showSettings(isCurrent) {
   const allowed = getSession()?.administrator;
   const settings = allowed ? await request('/api/vitrine/configuracao') : null;
+  const selectedTheme = allowed ? await request('/api/vitrine/tema') : null;
   if (!isCurrent()) return;
 
   app.innerHTML = adminNav() + '<h2>Configurações da vitrine</h2>' + notice +
-    (allowed ? '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
+    (allowed ? '<section class="box"><h3>Modelo visual da imobiliária</h3><p class="muted">Escolha uma apresentação para a vitrine. O cadastro e os imóveis permanecem inalterados.</p><form id="template-form"><label>Modelo<select name="template">' +
+      [['modern','Moderno'],['premium','Premium'],['commercial','Comercial']].map(([value,label]) =>
+        '<option value="' + value + '"' + (value === selectedTheme.template ? ' selected' : '') + '>' + label + '</option>').join('') +
+      '</select></label><label>Cor principal<input name="accentColor" type="color" value="' + escape(selectedTheme.accentColor) + '"></label><div class="row"><button>Aplicar modelo</button></div></form></section>' +
+      '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
       '<label>Nome do site<input name="siteName" required maxlength="80" value="' + escape(settings.name) + '"></label>' +
       '<label class="theme-color">Cor da vitrine<input name="siteColor" type="color" value="' + escape(settings.color || '#6B5140') + '"></label>' +
       '<label class="theme-opacity"><span>Opacidade da cor <output id="opacity-value"></output></span>' +
@@ -45,7 +50,7 @@ export async function showSettings(isCurrent) {
   if (!allowed) return;
 
   async function change(action, message) {
-    const controls = [...app.querySelectorAll('#brand-form :is(button,input,select), #logo-form :is(button,input,select), #banner-form :is(button,input,select)')];
+    const controls = [...app.querySelectorAll('#template-form :is(button,input,select), #brand-form :is(button,input,select), #logo-form :is(button,input,select), #banner-form :is(button,input,select)')];
     controls.forEach(control => { control.disabled = true; });
     try {
       await action();
@@ -54,6 +59,14 @@ export async function showSettings(isCurrent) {
     finally { controls.forEach(control => { control.disabled = false; }); }
   }
 
+  const templateForm = app.querySelector('#template-form');
+  templateForm.onsubmit = event => {
+    event.preventDefault();
+    change(() => request(endpoint + 'tema','PUT',{
+      template:templateForm.elements.template.value,
+      accentColor:templateForm.elements.accentColor.value
+    }), 'Modelo visual atualizado.');
+  };
   const brand = app.querySelector('#brand-form');
   const opacityValue = app.querySelector('#opacity-value');
   const preview = app.querySelector('#theme-preview');
