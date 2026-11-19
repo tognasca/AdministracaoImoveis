@@ -14,6 +14,7 @@ MediaEndpoints.Map(admin);
 StorefrontEndpoints.Map(admin);
 MenuEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);
+ExportEndpoints.Map(admin);
 PdfImportEndpoints.Map(admin);
 PdfImageImportEndpoints.Map(admin);
 app.MapFallbackToFile("/", "index.html", WebStartup.StaticAssets());
