@@ -36,6 +36,12 @@ function listingCard(home) {
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }
 
+function applyTheme(theme) {
+  const selected = ['modern','premium','commercial'].includes(theme?.template) ? theme.template : 'modern';
+  document.body.dataset.estateTemplate = selected;
+  if (/^#[0-9a-fA-F]{6}$/.test(theme?.accentColor ?? ''))
+    document.body.style.setProperty('--estate-accent',theme.accentColor);
+}
 function showBrand(settings) {
   const theme = storefrontTheme(settings);
   document.body.style.setProperty('--estate-accent', theme.background);
@@ -78,13 +84,15 @@ export async function storefront(params, isCurrent) {
   const gallery = !category && params.get('gallery') === 'true';
   const section = new URLSearchParams(category ? {category} : gallery ? {gallery:'true'} : {});
   const query = next => new URLSearchParams([...section, ...values, ['page', String(next)]]);
-  const [homes, settings, kinds] = await Promise.all([
+  const [homes, settings, kinds, theme] = await Promise.all([
     request('/api/imoveis?' + query(page)),
     request('/api/vitrine/configuracao').catch(() => ({})),
-    request('/api/imoveis/tipos').catch(() => [])
+    request('/api/imoveis/tipos').catch(() => []),
+    request('/api/vitrine/tema').catch(() => ({template:'modern'}))
   ]);
   if (!isCurrent()) return;
   showBrand(settings);
+  applyTheme(theme);
   showMenu(settings, category, gallery);
   const sectionTitle = settings.menu?.find(item => category ? item.id === category : gallery && item.kind === 'gallery')?.name;
   const heading = sectionTitle || (category ? 'Categoria de imóveis' : gallery ? 'Galeria' :
@@ -124,12 +132,14 @@ export async function storefront(params, isCurrent) {
 }
 
 export async function details(id, isCurrent) {
-  const [home,settings] = await Promise.all([
+  const [home,settings,theme] = await Promise.all([
     request('/api/imoveis/' + encodeURIComponent(id)),
-    request('/api/vitrine/configuracao').catch(() => ({}))
+    request('/api/vitrine/configuracao').catch(() => ({})),
+    request('/api/vitrine/tema').catch(() => ({template:'modern'}))
   ]);
   if (!isCurrent()) return;
   showBrand(settings);
+  applyTheme(theme);
   showMenu(settings);
   propertyDetail(home, settings, locationLabel(home.data));
 }
