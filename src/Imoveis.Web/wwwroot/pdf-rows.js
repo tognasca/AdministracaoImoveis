@@ -31,7 +31,7 @@ export function readPdfBlock(text) {
 
 export function classifyPdfPages(pages, model = 'auto') {
   const selected = model === 'auto' ? detectPdfModel(pages) : model;
-  const result = selected === 'kallas' ? classifyKallasPages(pages) : classifyGenericPages(pages);
+  const result = (selected === 'kallas' || selected === 'catalog') ? classifyKallasPages(pages) : classifyGenericPages(pages);
   return {...result, model:selected};
 }
 
@@ -143,8 +143,11 @@ const optionPattern = /^(.*?)\s{2,}(.*?)\s{2,}(.*?)\s+R\$\s*([\d.,]+)/i;
 
 export function detectPdfModel(pages) {
   const text = pages.join('\n');
-  return /\b(?:KALLAS|KAZZAS)\b/i.test(text) &&
-    /Empreend\./i.test(text) && /A partir de/i.test(text) ? 'kallas' : 'generic';
+  // Prefer structural evidence over supplier names. Other developers use the same
+  // project / delivery / address / variant layout under different branding.
+  const headers = (text.match(/Empreend\.?[^\n]*Entrega[^\n]*Endere[cç]o/gi) ?? []).length;
+  const variants = (text.match(/(?:Metragem|[ÁA]rea)[^\n]*(?:Dorms?|Quartos?)[^\n]*Vagas?/gi) ?? []).length;
+  return headers >= 2 && variants >= 2 ? 'catalog' : 'generic';
 }
 
 function catalogNumber(value) {
