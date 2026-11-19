@@ -13,6 +13,7 @@ PropertyEndpoints.Map(admin);
 MediaEndpoints.Map(admin);
 StorefrontEndpoints.Map(admin);
 SaasThemeEndpoints.Map(app, admin);
+SaasAdministrationEndpoints.Map(app);
 LeadEndpoints.Map(admin);
 MenuEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);
