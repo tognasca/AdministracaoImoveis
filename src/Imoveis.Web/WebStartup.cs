@@ -40,7 +40,8 @@ static class WebStartup
                 var staff = context.HttpContext.RequestServices.GetRequiredService<StaffStore>();
                 if (!Guid.TryParse(identity?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
                     || await staff.Find(id, context.HttpContext.RequestAborted) is not { Active: true } user
-                    || !identity!.IsInRole(user.Role))
+                    || !identity!.IsInRole(user.Role)
+                    || identity.FindFirstValue("tenant_id") != "00000000-0000-4000-8000-000000000001")
                     context.RejectPrincipal();
             };
             options.Events.OnRedirectToAccessDenied = context =>
