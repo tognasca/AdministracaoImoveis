@@ -15,7 +15,7 @@ export function adminNav() {
     const anchor = link(label, target, !selected);
     return selected ? anchor.replace('<a ', '<a aria-current="page" ') : anchor;
   };
-  return '<nav class="admin-nav" aria-label="Painel administrativo">' + item('Meus imóveis', 'admin') + item('Novo imóvel', 'editar') + item('Importações', '/admin/importacoes') + item('Tratar PDF', 'pdf') + (session?.administrator ? item('Usuários', 'usuarios') + item('Configurações', 'configuracoes') + item('Menu da vitrine', 'menu') : '') +
+  return '<nav class="admin-nav" aria-label="Painel administrativo">' + item('Meus imóveis', 'admin') + item('CRM', 'crm') + item('Novo imóvel', 'editar') + item('Importações', '/admin/importacoes') + item('Tratar PDF', 'pdf') + (session?.administrator ? item('Usuários', 'usuarios') + item('Configurações', 'configuracoes') + item('Menu da vitrine', 'menu') : '') +
     '<button class="alt" id="logout">Sair</button></nav>';
 }
 export function bindLogout() {
