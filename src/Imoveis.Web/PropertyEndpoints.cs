@@ -4,16 +4,16 @@ static class PropertyEndpoints
 {
     public static void Map(RouteGroupBuilder admin)
     {
-        admin.MapGet("/imoveis/tipos", (PropertyStore store, CancellationToken ct) => store.ListKinds(true, ct));
-        admin.MapGet("/imoveis", (PropertyStore db, string? q, int? page, CancellationToken ct) =>
-            db.Get(true, null, Search(q), Page(page), ct));
-        admin.MapGet("/imoveis/{id:guid}", async (Guid id, PropertyStore db, CancellationToken ct) =>
+        admin.MapGet("/imoveis/tipos", (PropertyStore store, TenantContext tenant, CancellationToken ct) => store.ListKinds(true, ct, tenant.Id));
+        admin.MapGet("/imoveis", (PropertyStore db, TenantContext tenant, string? q, int? page, CancellationToken ct) =>
+            db.Get(true, null, Search(q), Page(page), ct, tenantId: tenant.Id));
+        admin.MapGet("/imoveis/{id:guid}", async (Guid id, PropertyStore db, TenantContext tenant, CancellationToken ct) =>
         {
-            var result = await db.Get(true, id, "", 1, ct);
+            var result = await db.Get(true, id, "", 1, ct, tenantId: tenant.Id);
             return result.Count == 0 ? Results.NotFound() : Results.Ok(result[0]);
         });
-        admin.MapPost("/imoveis/publicar-rascunhos", async (PropertyStore store, CancellationToken ct) =>
-            Results.Ok(new { published = await store.PublishReadyDrafts(ct) }))
+        admin.MapPost("/imoveis/publicar-rascunhos", async (PropertyStore store, TenantContext tenant, CancellationToken ct) =>
+            Results.Ok(new { published = await store.PublishReadyDrafts(ct, tenant.Id) }))
             .RequireAuthorization(policy => policy.RequireRole("Administrador"));
         admin.MapPost("/imoveis", (PropertyInput input, PropertyStore store, StorefrontMenu menu, CancellationToken ct) =>
             Save(Guid.NewGuid(), input, true, store, menu, ct));
