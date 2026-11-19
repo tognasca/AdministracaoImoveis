@@ -20,6 +20,8 @@ static class WebStartup
             ?? throw new InvalidOperationException("Configure ConnectionStrings__Imoveis.");
 
         builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<TenantContext>();
         builder.Services.AddSingleton<PropertyStore>();
         builder.Services.AddSingleton<StaffStore>();
         builder.Services.AddSingleton<MediaStore>();
@@ -41,7 +43,7 @@ static class WebStartup
                 if (!Guid.TryParse(identity?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
                     || await staff.Find(id, context.HttpContext.RequestAborted) is not { Active: true } user
                     || !identity!.IsInRole(user.Role)
-                    || identity.FindFirstValue("tenant_id") != "00000000-0000-4000-8000-000000000001")
+                    || TenantContext.AuthenticatedTenant(identity) != TenantContext.LegacyId)
                     context.RejectPrincipal();
             };
             options.Events.OnRedirectToAccessDenied = context =>
@@ -89,6 +91,7 @@ static class WebStartup
             }
             await next();
         });
+        app.Use(TenantResolver.Resolve);
         app.UseStaticFiles(StaticAssets());
         app.UseRouting();
         app.UseRateLimiter();
