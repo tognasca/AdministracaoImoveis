@@ -75,6 +75,8 @@ await call(second,property+'/'+firstId+'/fotos/'+photo+'/capa',404,'PUT');
 
 const firstAdmin = (await call(first,staff,200)).find(user => user.username === 'admin');
 assert(!(await call(second,staff,200)).some(user => user.id === firstAdmin.id));
+assert((await call(first,crm+'/responsaveis',200)).some(user => user.id === firstAdmin.id));
+assert(!(await call(second,crm+'/responsaveis',200)).some(user => user.id === firstAdmin.id));
 await call(second,staff+'/'+firstAdmin.id,404,'PUT',{active:false});
 const lead = {name:'Contato de homologação',status:'new',propertyId:firstId,assignedTo:firstAdmin.id};
 const {id:leadId} = await call(first,crm,201,'POST',lead);

@@ -13,6 +13,9 @@ static class LeadEndpoints
     public static void Map(RouteGroupBuilder admin)
     {
         var group = admin.MapGroup("/crm/leads");
+        group.MapGet("/responsaveis", async (StaffStore staff, TenantContext tenant, CancellationToken ct) =>
+            (await staff.List(ct, tenant.Id)).Where(user => user.Active)
+                .Select(user => new { user.Id, user.Username }));
         group.MapGet("", async (NpgsqlDataSource db, TenantContext tenant, string? status, CancellationToken ct) =>
         {
             if (!string.IsNullOrEmpty(status) && !Statuses.Contains(status)) return Results.BadRequest("Etapa inválida.");
