@@ -54,15 +54,16 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         }
     }
 
-    public async Task<IResult> Read(Guid property, Guid id, bool admin, CancellationToken ct)
+    public async Task<IResult> Read(Guid property, Guid id, bool admin, CancellationToken ct, Guid? tenantId = null)
     {
         await using var command = db.CreateCommand("""
             SELECT f.content_type FROM photos f JOIN properties p ON p.id=f.property_id
-            WHERE f.property_id=@property AND f.id=@id AND (@admin OR p.status='Publicado')
+            WHERE f.property_id=@property AND f.id=@id AND p.tenant_id=@tenant AND (@admin OR p.status='Publicado')
             """);
         command.Parameters.AddWithValue("property", property);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("admin", admin);
+        command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         if (await command.ExecuteScalarAsync(ct) is not string type) return Results.NotFound();
         try
         {
