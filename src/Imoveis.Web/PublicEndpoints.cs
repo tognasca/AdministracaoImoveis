@@ -18,12 +18,12 @@ static class PublicEndpoints
                 ? number : "", banner = images.Exists(StorefrontImage.Banner) ? "/media/vitrine/banner" : null,
                 logo = images.Exists(StorefrontImage.Logo) ? "/media/vitrine/logo" : null });
         });
-        app.MapGet("/api/imoveis/tipos", (PropertyStore store, CancellationToken ct) => store.ListKinds(false, ct));
-        app.MapGet("/api/imoveis", (PropertyStore db, string? q, int? page, string? kind, decimal? maxPrice, int? bedrooms, Guid? category, bool? gallery, CancellationToken ct) =>
-            db.Get(false, null, PropertyEndpoints.Search(q), PropertyEndpoints.Page(page), ct, PropertyEndpoints.Search(kind), Math.Max(0, maxPrice ?? 0), Math.Max(0, bedrooms ?? 0), category, gallery == true));
-        app.MapGet("/api/imoveis/{id:guid}", async (Guid id, PropertyStore db, CancellationToken ct) =>
+        app.MapGet("/api/imoveis/tipos", (PropertyStore store, TenantContext tenant, CancellationToken ct) => store.ListKinds(false, ct, tenant.Id));
+        app.MapGet("/api/imoveis", (PropertyStore db, TenantContext tenant, string? q, int? page, string? kind, decimal? maxPrice, int? bedrooms, Guid? category, bool? gallery, CancellationToken ct) =>
+            db.Get(false, null, PropertyEndpoints.Search(q), PropertyEndpoints.Page(page), ct, PropertyEndpoints.Search(kind), Math.Max(0, maxPrice ?? 0), Math.Max(0, bedrooms ?? 0), category, gallery == true, tenant.Id));
+        app.MapGet("/api/imoveis/{id:guid}", async (Guid id, PropertyStore db, TenantContext tenant, CancellationToken ct) =>
         {
-            var result = await db.Get(false, id, "", 1, ct);
+            var result = await db.Get(false, id, "", 1, ct, tenantId: tenant.Id);
             return result.Count == 0 ? Results.NotFound() : Results.Ok(result[0]);
         });
         app.MapGet("/media/vitrine/banner", (StorefrontImages images, CancellationToken ct) => images.Read(StorefrontImage.Banner, ct));
