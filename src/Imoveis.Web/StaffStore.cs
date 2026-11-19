@@ -35,42 +35,46 @@ sealed class StaffStore(NpgsqlDataSource db)
             ? user : null;
     }
 
-    public async Task<StaffUser?> Find(Guid id, CancellationToken ct)
+    public async Task<StaffUser?> Find(Guid id, CancellationToken ct, Guid? tenantId = null)
     {
-        await using var query = db.CreateCommand("SELECT id,username,role,active FROM staff_users WHERE id=@id");
+        await using var query = db.CreateCommand("SELECT id,username,role,active FROM staff_users WHERE id=@id AND tenant_id=@tenant");
         query.Parameters.AddWithValue("id", id);
+        query.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         await using var reader = await query.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? Read(reader) : null;
     }
 
-    public async Task<List<StaffUser>> List(CancellationToken ct)
+    public async Task<List<StaffUser>> List(CancellationToken ct, Guid? tenantId = null)
     {
-        await using var query = db.CreateCommand("SELECT id,username,role,active FROM staff_users ORDER BY lower(username)");
+        await using var query = db.CreateCommand("SELECT id,username,role,active FROM staff_users WHERE tenant_id=@tenant ORDER BY lower(username)");
+        query.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         await using var reader = await query.ExecuteReaderAsync(ct);
         var users = new List<StaffUser>();
         while (await reader.ReadAsync(ct)) users.Add(Read(reader));
         return users;
     }
 
-    public async Task<bool> Create(StaffCreate input, CancellationToken ct)
+    public async Task<bool> Create(StaffCreate input, CancellationToken ct, Guid? tenantId = null)
     {
         var user = new StaffUser(Guid.NewGuid(), input.Username.Trim(), input.Role, true);
         await using var query = db.CreateCommand("""
-            INSERT INTO staff_users (id,username,password_hash,role)
-            VALUES(@id,@username,@hash,@role) ON CONFLICT (lower(username)) DO NOTHING
+            INSERT INTO staff_users (id,username,password_hash,role,tenant_id)
+            VALUES(@id,@username,@hash,@role,@tenant) ON CONFLICT (lower(username)) DO NOTHING
             """);
         query.Parameters.AddWithValue("id", user.Id);
         query.Parameters.AddWithValue("username", user.Username);
         query.Parameters.AddWithValue("hash", hasher.HashPassword(user, input.Password));
         query.Parameters.AddWithValue("role", user.Role);
+        query.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         return await query.ExecuteNonQueryAsync(ct) == 1;
     }
 
-    public async Task<bool> ChangeState(Guid id, bool active, CancellationToken ct)
+    public async Task<bool> ChangeState(Guid id, bool active, CancellationToken ct, Guid? tenantId = null)
     {
-        await using var query = db.CreateCommand("UPDATE staff_users SET active=@active WHERE id=@id AND username<>'admin'");
+        await using var query = db.CreateCommand("UPDATE staff_users SET active=@active WHERE id=@id AND tenant_id=@tenant AND username<>'admin'");
         query.Parameters.AddWithValue("id", id);
         query.Parameters.AddWithValue("active", active);
+        query.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         return await query.ExecuteNonQueryAsync(ct) == 1;
     }
 
