@@ -17,6 +17,13 @@ static class ExportEndpoints
         admin.MapGet("/exportacoes/formatos", () => Results.Ok(new[] { "json", "csv", "xml" }));
     }
 
+    // Prevent spreadsheet formula execution when users open CSV files.
+    private static string SafeCsv(string value)
+    {
+        var trimmed = value.TrimStart();
+        return trimmed.Length > 0 && "=+-@".Contains(trimmed[0]) ? "'" + value : value;
+    }
+
     private static async Task<IResult> Export(HttpRequest request, NpgsqlDataSource db,
         string? format, DateTimeOffset? since, int? limit, CancellationToken ct)
     {
@@ -72,7 +79,7 @@ static class ExportEndpoints
                     p.Size.ToString(CultureInfo.InvariantCulture),p.Status,p.Notes ?? "",p.Zone ?? "",
                     p.ModifiedAt.ToString("O",CultureInfo.InvariantCulture),
                     string.Join("|",p.Photos.Select(photo => photo.Url))];
-                csv.AppendLine(string.Join(";",fields.Select(value => "\"" + value.Replace("\"","\"\"") + "\"")));
+                csv.AppendLine(string.Join(";",fields.Select(value => "\"" + SafeCsv(value).Replace("\"","\"\"") + "\"")));
             }
             return Results.File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray(),
                 "text/csv", "imoveis.csv");
