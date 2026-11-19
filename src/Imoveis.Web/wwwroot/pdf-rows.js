@@ -132,6 +132,12 @@ export function pdfRowCells(data, mapping) {
   });
 }
 
+// Recognize catalog variants without assuming one supplier's fixed column layout.
+const normalizedCatalogLabel = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const catalogHeader = line => {
+  const value = normalizedCatalogLabel(line);
+  return /metragem|area/.test(value) && /dorm|quarto|suite/.test(value) && /vaga/.test(value);
+};
 const projectPattern = /^(.+?)\s{2,}((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}|PRONTO)\s{2,}(.+)$/i;
 const optionPattern = /^(.*?)\s{2,}(.*?)\s{2,}(.*?)\s+R\$\s*([\d.,]+)/i;
 
@@ -183,7 +189,7 @@ function classifyKallasPages(pages) {
         information.push({page:index+1,text:line,data:{}});
         continue;
       }
-      if (/METRAGEM.*DORMS.*VAGAS/i.test(line) && pendingMetadata) {
+      if (catalogHeader(line) && pendingMetadata) {
         if (pendingName) project = {name:pendingName,...pendingMetadata};
         pendingMetadata = null;
       } else if (pendingMetadata) {
