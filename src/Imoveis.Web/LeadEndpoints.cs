@@ -7,13 +7,11 @@ record LeadView(Guid Id, Guid? PropertyId, string Name, string? Email, string? P
 
 static class LeadEndpoints
 {
-    // Legacy-only until the full tenant resolver and cross-tenant authorization are ready.
-    private static readonly Guid Tenant = Guid.Parse("00000000-0000-4000-8000-000000000001");
     private static readonly HashSet<string> Statuses = ["new","contacted","visit","proposal","won","lost"];
     public static void Map(RouteGroupBuilder admin)
     {
         var group = admin.MapGroup("/crm/leads");
-        group.MapGet("", async (NpgsqlDataSource db, string? status, CancellationToken ct) =>
+        group.MapGet("", async (NpgsqlDataSource db, TenantContext tenant, string? status, CancellationToken ct) =>
         {
             if (!string.IsNullOrEmpty(status) && !Statuses.Contains(status)) return Results.BadRequest("Etapa inválida.");
             await using var command = db.CreateCommand("""
@@ -21,7 +19,7 @@ static class LeadEndpoints
                 FROM saas_leads WHERE tenant_id=@tenant AND (@status='' OR status=@status)
                 ORDER BY created_at DESC LIMIT 200
                 """);
-            command.Parameters.AddWithValue("tenant", Tenant);
+            command.Parameters.AddWithValue("tenant", tenant.Id);
             command.Parameters.AddWithValue("status", status ?? "");
             await using var reader = await command.ExecuteReaderAsync(ct);
             var leads = new List<LeadView>();
@@ -33,7 +31,7 @@ static class LeadEndpoints
                     reader.IsDBNull(7)?null:reader.GetString(7),reader.GetDateTime(8)));
             return Results.Ok(leads);
         });
-        group.MapPost("", async (LeadInput input, NpgsqlDataSource db, CancellationToken ct) =>
+        group.MapPost("", async (LeadInput input, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             if (Validate(input) is { } error) return Results.BadRequest(error);
             var id = Guid.NewGuid();
@@ -45,12 +43,12 @@ static class LeadEndpoints
                   AND (@assigned IS NULL OR EXISTS
                   (SELECT 1 FROM staff_users WHERE id=@assigned AND tenant_id=@tenant AND active))
                 """);
-            Bind(command,id,input);
+            Bind(command,id,input,tenant.Id);
             return await command.ExecuteNonQueryAsync(ct)==1
                 ? Results.Created($"/api/admin/crm/leads/{id}",new {id})
                 : Results.BadRequest("Imóvel ou responsável não pertence à imobiliária.");
         });
-        group.MapPut("/{id:guid}", async (Guid id, LeadInput input, NpgsqlDataSource db, CancellationToken ct) =>
+        group.MapPut("/{id:guid}", async (Guid id, LeadInput input, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             if (Validate(input) is { } error) return Results.BadRequest(error);
             await using var command = db.CreateCommand("""
@@ -77,10 +75,10 @@ static class LeadEndpoints
         return null;
     }
 
-    private static void Bind(NpgsqlCommand command, Guid id, LeadInput input)
+    private static void Bind(NpgsqlCommand command, Guid id, LeadInput input, Guid tenantId)
     {
         command.Parameters.AddWithValue("id",id);
-        command.Parameters.AddWithValue("tenant",Tenant);
+        command.Parameters.AddWithValue("tenant",tenantId);
         command.Parameters.AddWithValue("property",NpgsqlTypes.NpgsqlDbType.Uuid,(object?)input.PropertyId ?? DBNull.Value);
         command.Parameters.AddWithValue("name",input.Name.Trim());
         command.Parameters.AddWithValue("email",NpgsqlTypes.NpgsqlDbType.Text,(object?)input.Email?.Trim() ?? DBNull.Value);
