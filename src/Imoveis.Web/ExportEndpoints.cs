@@ -32,7 +32,7 @@ static class ExportEndpoints
                    COALESCE(jsonb_agg(jsonb_build_object('id',f.id,'slot',f.slot)
                      ORDER BY f.slot) FILTER (WHERE f.id IS NOT NULL),'[]'::jsonb)::text
             FROM properties p LEFT JOIN photos f ON f.property_id=p.id
-            WHERE (@since IS NULL OR p.modified_at > @since)
+            WHERE (@since IS NULL OR p.modified_at >= @since)
             GROUP BY p.id ORDER BY p.modified_at,p.id LIMIT @limit
             """);
         command.Parameters.AddWithValue("since", NpgsqlTypes.NpgsqlDbType.TimestampTz,
