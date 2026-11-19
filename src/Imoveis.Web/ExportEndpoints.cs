@@ -24,7 +24,7 @@ static class ExportEndpoints
         return trimmed.Length > 0 && "=+-@".Contains(trimmed[0]) ? "'" + value : value;
     }
 
-    private static async Task<IResult> Export(HttpRequest request, NpgsqlDataSource db,
+    private static async Task<IResult> Export(HttpRequest request, NpgsqlDataSource db, TenantContext tenant,
         string? format, DateTimeOffset? since, int? limit, CancellationToken ct)
     {
         var type = (format ?? "json").Trim().ToLowerInvariant();
@@ -39,12 +39,13 @@ static class ExportEndpoints
                    COALESCE(jsonb_agg(jsonb_build_object('id',f.id,'slot',f.slot)
                      ORDER BY f.slot) FILTER (WHERE f.id IS NOT NULL),'[]'::jsonb)::text
             FROM properties p LEFT JOIN photos f ON f.property_id=p.id
-            WHERE (@since IS NULL OR p.modified_at >= @since)
+            WHERE p.tenant_id=@tenant AND (@since IS NULL OR p.modified_at >= @since)
             GROUP BY p.id ORDER BY p.modified_at,p.id LIMIT @limit
             """);
         command.Parameters.AddWithValue("since", NpgsqlTypes.NpgsqlDbType.TimestampTz,
             (object?)since?.UtcDateTime ?? DBNull.Value);
         command.Parameters.AddWithValue("limit", max);
+        command.Parameters.AddWithValue("tenant", tenant.Id);
         var items = new List<ExportProperty>();
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
