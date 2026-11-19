@@ -6,7 +6,7 @@ const checks = [
  ['legacy tenant migration', 'src/Imoveis.Web/Database/014-saas-foundation.sql', /UPDATE properties SET tenant_id=/],
  ['tenant-aware users', 'src/Imoveis.Web/Database/015-saas-business-foundation.sql', /ALTER TABLE staff_users ADD COLUMN/],
  ['ownership constraints', 'src/Imoveis.Web/Database/016-saas-ownership-constraints.sql', /saas_leads_property_same_tenant/],
- ['fail-closed multi-tenant flag', 'src/Imoveis.Web/WebStartup.cs', /Saas:EnableMultiTenant/],
+ ['verified tenant domain', 'src/Imoveis.Web/TenantContext.cs', /d.verified_at IS NOT NULL/],
  ['CRM endpoint registration', 'src/Imoveis.Web/Program.cs', /LeadEndpoints\.Map\(admin\)/],
  ['theme endpoint registration', 'src/Imoveis.Web/Program.cs', /SaasThemeEndpoints\.Map\(app, admin\)/],
  ['CRM navigation', 'src/Imoveis.Web/wwwroot/app.js', /await crm\(isCurrent\)/]

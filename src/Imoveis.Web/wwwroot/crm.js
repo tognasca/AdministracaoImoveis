@@ -25,7 +25,8 @@ export async function crm(isCurrent) {
       (lead.phone?'<p>'+escape(lead.phone)+'</p>':'') +
       '</div><label>Etapa<select name="status">'+stageOptions(lead.status)+'</select></label>' +
       '<label>Observações<textarea name="notes" maxlength="4000" rows="2">'+escape(lead.notes)+'</textarea></label>' +
-      '<button class="alt">Salvar</button></form>').join('')+'</div>' :
+      '<div><button class="alt">Salvar</button>' +
+      '<details class="lead-history"><summary>Histórico de etapas</summary><ol></ol></details></div></form>').join('')+'</div>' :
       '<p>Nenhum contato cadastrado.</p>')+'</section>';
   bindLogout();
   const create = app.querySelector('#lead-new');
@@ -42,6 +43,20 @@ export async function crm(isCurrent) {
     finally { button.disabled=false; }
   };
   for (const form of app.querySelectorAll('.crm-lead')) {
+    const history = form.querySelector('.lead-history');
+    const events = history.querySelector('ol');
+    const loadHistory = async () => {
+      if (!history.open) return;
+      events.innerHTML = '<li>Carregando…</li>';
+      try {
+        const items = await request('/api/admin/crm/leads/'+encodeURIComponent(form.dataset.id)+'/historico');
+        events.innerHTML = items.length ? items.map(item =>
+          '<li>'+escape(stages.find(([value]) => value === item.status)?.[1])+
+          ' · '+escape(item.changedBy)+' · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+'</li>'
+        ).join('') : '<li>Nenhuma mudança registrada.</li>';
+      } catch (error) { events.innerHTML = '<li>'+escape(error.message)+'</li>'; }
+    };
+    history.ontoggle = loadHistory;
     form.onsubmit = async event => {
       event.preventDefault();
       const lead=leads.find(item=>item.id===form.dataset.id);
@@ -53,7 +68,10 @@ export async function crm(isCurrent) {
           propertyId:lead.propertyId,name:lead.name,email:lead.email,phone:lead.phone,
           assignedTo:lead.assignedTo,...Object.fromEntries(new FormData(form))
         });
-        if(isCurrent()) report('Contato atualizado.');
+        if(isCurrent()) {
+          report('Contato atualizado.');
+          await loadHistory();
+        }
       } catch(error) { if(isCurrent()) report(error.message); }
       finally { button.disabled=false; }
     };

@@ -17,19 +17,35 @@ static class TenantResolver
     {
         var settings = context.RequestServices.GetRequiredService<IConfiguration>();
         var host = context.Request.Host.Host.TrimEnd('.').ToLowerInvariant();
-        var configured = settings["Saas:LegacyHostnames"] ?? "";
-        var allowed = configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var legacy = host is "localhost" or "127.0.0.1" or "::1"
-            || allowed.Any(x => string.Equals(x, host, StringComparison.OrdinalIgnoreCase));
-        if (allowed.Length > 0 && !legacy)
+        if (!settings.GetValue<bool>("Saas:EnableMultiTenant"))
         {
-            // A verified domain can resolve, but is not served until all data paths are isolated.
-            // This prevents custom domains from accidentally seeing the legacy catalog.
-            context.Response.StatusCode = StatusCodes.Status421MisdirectedRequest;
-            await context.Response.WriteAsync("Domínio não configurado para esta instalação.");
-            return;
+            var configured = settings["Saas:LegacyHostnames"] ?? "";
+            var allowed = configured.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (allowed.Length == 0 || host is "localhost" or "127.0.0.1" or "::1"
+                || allowed.Contains(host, StringComparer.OrdinalIgnoreCase))
+            {
+                context.Items["SaasTenantId"] = TenantContext.LegacyId;
+                await next(context);
+                return;
+            }
         }
-        context.Items["SaasTenantId"] = TenantContext.LegacyId;
-        await next(context);
+        else
+        {
+            var db = context.RequestServices.GetRequiredService<NpgsqlDataSource>();
+            await using var query = db.CreateCommand("""
+                SELECT t.id FROM saas_domains d JOIN saas_tenants t ON t.id=d.tenant_id
+                WHERE d.hostname=@host AND d.verified_at IS NOT NULL AND t.status='active'
+                """);
+            query.Parameters.AddWithValue("host", host);
+            if (await query.ExecuteScalarAsync(context.RequestAborted) is Guid id)
+            {
+                context.Items["SaasTenantId"] = id;
+                await next(context);
+                return;
+            }
+        }
+
+        context.Response.StatusCode = StatusCodes.Status421MisdirectedRequest;
+        await context.Response.WriteAsync("Domínio não configurado para esta instalação.");
     }
 }

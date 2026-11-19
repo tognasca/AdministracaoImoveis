@@ -1,37 +1,36 @@
-# Migração SaaS — checklist de liberação
+# Homologação multiempresa
 
-Status: **estrutura inicial; NÃO habilitar multiempresa em produção**.
+O Compose mantém o modo de instalação única por padrão. Com
+`SAAS_ENABLE_MULTI_TENANT=true`, cada hostname precisa constar em
+`saas_domains`, com `verified_at` preenchido e vinculado a uma imobiliária
+ativa. Isso inclui o hostname da imobiliária original. Hosts desconhecidos,
+não verificados e suspensos recebem HTTP 421.
 
-## Implementado
-- Tenant legado e vínculo de imóveis (migração 014).
-- Usuários com vínculo de tenant, tabela de domínios, catálogo de planos,
-  assinaturas e leads (migração 015).
-- Temas Moderno, Premium e Comercial para o tenant legado.
-- Bloqueio de inicialização caso `Saas:EnableMultiTenant=true`.
+O proxy deve preservar o host aceito e encaminhar somente domínios da
+instalação. Confirme a titularidade de cada domínio antes de registrar a
+verificação. A branch ainda depende de provisionamento operacional de tenants,
+domínios e administrador inicial de novas imobiliárias. O bootstrap por
+`Admin__Password` cria somente o administrador da instalação original.
 
-## Bloqueadores para liberar clientes distintos
-1. Resolver tenant exclusivamente por hostname verificado, rejeitando hosts desconhecidos.
-2. Vincular login/cookie ao tenant e validar tenant, usuário, função e status em cada requisição.
-3. Aplicar `tenant_id` a TODAS as consultas, atualizações e exclusões, inclusive
-   propriedades, fotos, equipe, importação, exportação, menus, identidade e assets.
-4. Criar chaves únicas por tenant e migrações seguras para dados legados.
-5. Isolar armazenamento físico de fotos e assets por tenant; bloquear acesso cruzado.
-6. Garantir autorização de plataforma separada da autorização da imobiliária.
-7. Implementar provisionamento, suspensão e recuperação de tenants com auditoria.
-8. Integrar provedor de pagamentos com webhooks autenticados e idempotentes,
-   conciliação, regras de cobrança e testes de falhas.
-9. Implementar endpoints e UI do CRM com consentimento, LGPD e permissões.
-10. Integrar IA e portais apenas com credenciais por tenant e quotas.
-11. Executar build, testes unitários, integração, migração, E2E, segurança e backup/restauração.
+## Dados preservados
 
-## Critérios mínimos de homologação
-- Dois tenants com usuários, imóveis, fotos, domínios e menus distintos.
-- Acesso por ID de outro tenant retorna 404/403 em todas as rotas.
-- Upload/importação/exportação não vazam dados nem arquivos.
-- Cookie emitido para um domínio não autoriza acesso a outro tenant.
-- Tenant suspenso não consegue usar endpoints administrativos.
-- Reprocessamento de webhook não duplica cobrança.
-- Rollback e restauração de backup validados em ambiente de homologação.
+- As migrações 018–020 atribuem os registros existentes de importação e vitrine
+  à imobiliária original, ajustam as chaves por empresa e mantêm as restrições
+  de propriedade e os vínculos por tenant.
+- Fotos, logotipo e banner da instalação original mantêm os caminhos em disco.
+  Novas imobiliárias usam diretórios próprios sob `Media:Path`.
+- A migração 021 registra novas etapas do CRM e o usuário que fez cada mudança.
+  Leads anteriores mantêm os dados existentes e ganham histórico quando a
+  etapa muda.
 
-A migração 015 cria **somente tabelas**. Não implica cobrança ativa,
-CRM operacional, domínios resolvidos, isolamento concluído ou publicação.
+## Validação de liberação
+
+- O workflow executa build .NET 10, testes de parsers, inicialização com as
+  migrações em PostgreSQL 17, regressão da instalação original e testes HTTP
+  de acesso cruzado entre dois domínios em banco descartável.
+- Antes de liberar clientes, validar a atualização e a restauração com uma
+  cópia representativa do banco e da mídia da instalação, o proxy HTTPS e o
+  fluxo de sessão em navegador.
+- Ainda precisam de homologação visual os fluxos no desktop, smartphone e
+  tablet, a revisão de fotos extraídas de PDFs por imóvel e os fluxos de
+  operação do CRM e de domínios.

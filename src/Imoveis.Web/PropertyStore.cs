@@ -22,7 +22,7 @@ sealed class PropertyStore(NpgsqlDataSource db)
               AND (@max_price=0 OR price<=@max_price)
               AND (@bedrooms=0 OR bedrooms>=@bedrooms)
               AND (@category IS NULL OR EXISTS (
-                  SELECT 1 FROM storefront_menu m WHERE m.id=@category AND m.id=p.category_id AND m.visible AND m.kind='category'))
+                  SELECT 1 FROM storefront_menu m WHERE m.id=@category AND m.id=p.category_id AND m.tenant_id=p.tenant_id AND m.visible AND m.kind='category'))
               AND (NOT @gallery OR EXISTS (SELECT 1 FROM photos WHERE property_id=p.id))
             ORDER BY lower(title), p.id LIMIT 30 OFFSET @offset
             """);

@@ -26,7 +26,7 @@ static class PropertyEndpoints
     static async Task<IResult> Save(Guid id, PropertyInput input, bool create, PropertyStore store, StorefrontMenu menu, TenantContext tenant, CancellationToken ct)
     {
         if (PropertyValidation.Validate(input) is { } error) return Results.BadRequest(error);
-        if (input.CategoryId is { } category && !(await menu.List(false, ct)).Any(item => item.Id == category && item.Kind == "category"))
+        if (input.CategoryId is { } category && !(await menu.List(false, ct, tenant.Id)).Any(item => item.Id == category && item.Kind == "category"))
             return Results.BadRequest("Selecione uma categoria válida.");
         try
         {

@@ -10,9 +10,6 @@ static class WebStartup
 {
     public static string ConfigureServices(WebApplicationBuilder builder)
     {
-        // Fail closed: tenant resolution, query scoping and media isolation are not active yet.
-        if (builder.Configuration.GetValue<bool>("Saas:EnableMultiTenant"))
-            throw new InvalidOperationException("Multiempresa indisponível: conclua isolamento de dados, autenticação, mídia e testes antes de ativar.");
         var password = builder.Configuration["Admin:Password"];
         if (string.IsNullOrWhiteSpace(password) || password.Length is < 16 or > 256)
             throw new InvalidOperationException("Configure Admin__Password com 16 a 256 caracteres.");

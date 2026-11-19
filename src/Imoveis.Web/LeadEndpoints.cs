@@ -5,6 +5,8 @@ record LeadInput(Guid? PropertyId, string Name, string? Email, string? Phone, st
 record LeadView(Guid Id, Guid? PropertyId, string Name, string? Email, string? Phone,
     string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt);
 
+record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt);
+
 static class LeadEndpoints
 {
     private static readonly HashSet<string> Statuses = ["new","contacted","visit","proposal","won","lost"];
@@ -31,38 +33,74 @@ static class LeadEndpoints
                     reader.IsDBNull(7)?null:reader.GetString(7),reader.GetDateTime(8)));
             return Results.Ok(leads);
         });
-        group.MapPost("", async (LeadInput input, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
+        group.MapPost("", async (LeadInput input, ClaimsPrincipal user, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             if (Validate(input) is { } error) return Results.BadRequest(error);
             var id = Guid.NewGuid();
             await using var command = db.CreateCommand("""
+                WITH created AS (
                 INSERT INTO saas_leads(id,tenant_id,property_id,name,email,phone,status,assigned_to,notes)
                 SELECT @id,@tenant,@property,@name,@email,@phone,@status,@assigned,@notes
                 WHERE (@property IS NULL OR EXISTS
                   (SELECT 1 FROM properties WHERE id=@property AND tenant_id=@tenant))
                   AND (@assigned IS NULL OR EXISTS
                   (SELECT 1 FROM staff_users WHERE id=@assigned AND tenant_id=@tenant AND active))
+                RETURNING id
+                )
+                INSERT INTO saas_lead_stage_history(tenant_id,lead_id,changed_by,status)
+                SELECT @tenant,id,@actor,@status FROM created
                 """);
-            Bind(command,id,input,tenant.Id);
+            Bind(command,id,input,tenant.Id,Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!));
             return await command.ExecuteNonQueryAsync(ct)==1
                 ? Results.Created($"/api/admin/crm/leads/{id}",new {id})
                 : Results.BadRequest("Imóvel ou responsável não pertence à imobiliária.");
         });
-        group.MapPut("/{id:guid}", async (Guid id, LeadInput input, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
+        group.MapPut("/{id:guid}", async (Guid id, LeadInput input, ClaimsPrincipal user, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             if (Validate(input) is { } error) return Results.BadRequest(error);
             await using var command = db.CreateCommand("""
+                WITH previous AS (
+                  SELECT id,status FROM saas_leads WHERE id=@id AND tenant_id=@tenant FOR UPDATE
+                ), changed AS (
                 UPDATE saas_leads SET property_id=@property,name=@name,email=@email,phone=@phone,
                     status=@status,assigned_to=@assigned,notes=@notes,updated_at=now()
-                WHERE id=@id AND tenant_id=@tenant
+                FROM previous
+                WHERE saas_leads.id=previous.id AND tenant_id=@tenant
                   AND (@property IS NULL OR EXISTS
                     (SELECT 1 FROM properties WHERE id=@property AND tenant_id=@tenant))
                   AND (@assigned IS NULL OR EXISTS
                     (SELECT 1 FROM staff_users WHERE id=@assigned AND tenant_id=@tenant AND active))
+                RETURNING saas_leads.id, previous.status AS old_status
+                ), recorded AS (
+                  INSERT INTO saas_lead_stage_history(tenant_id,lead_id,changed_by,status)
+                  SELECT @tenant,id,@actor,@status FROM changed WHERE old_status<>@status
+                )
+                SELECT EXISTS(SELECT 1 FROM changed)
                 """);
-            Bind(command,id,input,tenant.Id);
-            return await command.ExecuteNonQueryAsync(ct)==1
+            Bind(command,id,input,tenant.Id,Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!));
+            return await command.ExecuteScalarAsync(ct) is true
                 ? Results.NoContent() : Results.NotFound();
+        });
+        group.MapGet("/{id:guid}/historico", async (Guid id, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
+        {
+            await using var command = db.CreateCommand("""
+                SELECT event.status, staff.username, event.created_at
+                FROM saas_leads lead
+                LEFT JOIN saas_lead_stage_history event ON event.tenant_id=lead.tenant_id AND event.lead_id=lead.id
+                LEFT JOIN staff_users staff ON staff.tenant_id=event.tenant_id AND staff.id=event.changed_by
+                WHERE lead.tenant_id=@tenant AND lead.id=@id
+                ORDER BY event.id DESC LIMIT 100
+                """);
+            command.Parameters.AddWithValue("tenant", tenant.Id);
+            command.Parameters.AddWithValue("id", id);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return Results.NotFound();
+            var events = new List<LeadStageEvent>();
+            do
+            {
+                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.GetString(1), reader.GetDateTime(2)));
+            } while (await reader.ReadAsync(ct));
+            return Results.Ok(events);
         });
     }
 
@@ -75,9 +113,10 @@ static class LeadEndpoints
         return null;
     }
 
-    private static void Bind(NpgsqlCommand command, Guid id, LeadInput input, Guid tenantId)
+    private static void Bind(NpgsqlCommand command, Guid id, LeadInput input, Guid tenantId, Guid actorId)
     {
         command.Parameters.AddWithValue("id",id);
+        command.Parameters.AddWithValue("actor", actorId);
         command.Parameters.AddWithValue("tenant",tenantId);
         command.Parameters.AddWithValue("property",NpgsqlTypes.NpgsqlDbType.Uuid,(object?)input.PropertyId ?? DBNull.Value);
         command.Parameters.AddWithValue("name",input.Name.Trim());

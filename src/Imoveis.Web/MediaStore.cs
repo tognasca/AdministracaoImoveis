@@ -5,7 +5,11 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
     public const int MaxBytes = 8 * 1024 * 1024;
     private readonly string root = Path.GetFullPath(configuration["Media:Path"] ?? "./midia");
 
-    private string FilePath(Guid property, Guid photo) => Path.Combine(root, property.ToString("N"), photo.ToString("N"));
+    private string FilePath(Guid property, Guid photo, Guid tenantId)
+    {
+        var directory = tenantId == TenantContext.LegacyId ? root : Path.Combine(root, "tenants", tenantId.ToString("N"));
+        return Path.Combine(directory, property.ToString("N"), photo.ToString("N"));
+    }
 
     public async Task<int> Add(Guid property, IFormFile file, CancellationToken ct, Guid tenantId)
     {
@@ -28,7 +32,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         if (await find.ExecuteScalarAsync(ct) is not int slot) return 409;
 
         var id = Guid.NewGuid();
-        var path = FilePath(property, id);
+        var path = FilePath(property, id, tenantId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var written = false;
         try
@@ -54,7 +58,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         }
     }
 
-    public async Task<IResult> Read(Guid property, Guid id, bool admin, CancellationToken ct, Guid? tenantId = null)
+    public async Task<IResult> Read(Guid property, Guid id, bool admin, CancellationToken ct, Guid tenantId)
     {
         await using var command = db.CreateCommand("""
             SELECT f.content_type FROM photos f JOIN properties p ON p.id=f.property_id
@@ -63,11 +67,11 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         command.Parameters.AddWithValue("property", property);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("admin", admin);
-        command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
+        command.Parameters.AddWithValue("tenant", tenantId);
         if (await command.ExecuteScalarAsync(ct) is not string type) return Results.NotFound();
         try
         {
-            var stream = new FileStream(FilePath(property, id), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            var stream = new FileStream(FilePath(property, id, tenantId), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             return Results.File(stream, type, enableRangeProcessing: true);
         }
         catch (FileNotFoundException) { return Results.NotFound(); }
@@ -85,7 +89,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         command.Parameters.AddWithValue("id", id);
         if (await command.ExecuteNonQueryAsync(ct) == 0) return false;
         await tx.CommitAsync(CancellationToken.None);
-        File.Delete(FilePath(property, id));
+        File.Delete(FilePath(property, id, tenantId));
         return true;
     }
 

@@ -12,10 +12,11 @@ sealed class StaffStore(NpgsqlDataSource db)
     public async Task Initialize(string password, CancellationToken ct)
     {
         await using var query = db.CreateCommand("""
-            INSERT INTO staff_users (id,username,password_hash,role)
-            VALUES(@id,'admin',@hash,'Administrador') ON CONFLICT (lower(username)) DO NOTHING
+            INSERT INTO staff_users (id,username,password_hash,role,tenant_id)
+            VALUES(@id,'admin',@hash,'Administrador',@tenant) ON CONFLICT (tenant_id,lower(username)) DO NOTHING
             """);
         var user = new StaffUser(Guid.NewGuid(), "admin", "Administrador", true);
+        query.Parameters.AddWithValue("tenant", TenantContext.LegacyId);
         query.Parameters.AddWithValue("id", user.Id);
         query.Parameters.AddWithValue("hash", hasher.HashPassword(user, password));
         await query.ExecuteNonQueryAsync(ct);
@@ -60,7 +61,7 @@ sealed class StaffStore(NpgsqlDataSource db)
         var user = new StaffUser(Guid.NewGuid(), input.Username.Trim(), input.Role, true);
         await using var query = db.CreateCommand("""
             INSERT INTO staff_users (id,username,password_hash,role,tenant_id)
-            VALUES(@id,@username,@hash,@role,@tenant) ON CONFLICT (lower(username)) DO NOTHING
+            VALUES(@id,@username,@hash,@role,@tenant) ON CONFLICT (tenant_id,lower(username)) DO NOTHING
             """);
         query.Parameters.AddWithValue("id", user.Id);
         query.Parameters.AddWithValue("username", user.Username);

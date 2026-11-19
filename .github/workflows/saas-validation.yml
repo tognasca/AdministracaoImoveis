@@ -70,3 +70,30 @@ jobs:
       - name: Show API logs on failure
         if: failure()
         run: cat /tmp/imoveis-ci.log
+      - name: Verify isolation with two verified domains
+        env:
+          Admin__Password: ci_admin_password_long_enough_2026
+          ConnectionStrings__Imoveis: Host=localhost;Port=5432;Database=imoveis_ci;Username=imoveis;Password=imoveis_ci_password
+          ASPNETCORE_URLS: http://127.0.0.1:5100
+          ASPNETCORE_ENVIRONMENT: Development
+          Saas__EnableMultiTenant: 'true'
+          Media__Path: /tmp/imoveis-ci-media
+          IMOVEIS_URL: http://127.0.0.1:5100
+          IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U imoveis -d imoveis_ci < scripts/fixtures-saas-domains.sql
+          dotnet run --no-build --configuration Release --project src/Imoveis.Web/Imoveis.Web.csproj > /tmp/imoveis-multi-ci.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do
+            if curl --fail --silent -H 'Host: imoveis-ci.test' http://127.0.0.1:5100/health; then
+              node scripts/verificar-multiempresa.mjs
+              exit
+            fi
+            if ! kill -0 "$app_pid" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          exit 1
+      - name: Show multi-tenant API logs on failure
+        if: failure()
+        run: cat /tmp/imoveis-multi-ci.log || true
