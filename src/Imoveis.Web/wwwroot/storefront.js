@@ -39,12 +39,14 @@ function listingCard(home) {
 function applyTheme(theme) {
   const selected = ['modern','premium','commercial'].includes(theme?.template) ? theme.template : 'modern';
   document.body.dataset.estateTemplate = selected;
-  if (/^#[0-9a-fA-F]{6}$/.test(theme?.accentColor ?? ''))
-    document.body.style.setProperty('--estate-accent',theme.accentColor);
+  document.body.dataset.estateAccent = /^#[0-9a-fA-F]{6}$/.test(theme?.accentColor ?? '') ? theme.accentColor : '';
+  if (document.body.dataset.estateAccent)
+    document.body.style.setProperty('--estate-accent',document.body.dataset.estateAccent);
 }
 function showBrand(settings) {
   const theme = storefrontTheme(settings);
-  document.body.style.setProperty('--estate-accent', theme.background);
+  if (!/^#[0-9a-fA-F]{6}$/.test(document.body.dataset.estateAccent ?? ''))
+    document.body.style.setProperty('--estate-accent', theme.background);
   document.body.style.setProperty('--estate-on-accent', theme.foreground);
   document.body.style.setProperty('--estate-accent-shade', theme.shade);
   const name = settings.name || 'Imóveis Cotia';
@@ -91,8 +93,8 @@ export async function storefront(params, isCurrent) {
     request('/api/vitrine/tema').catch(() => ({template:'modern'}))
   ]);
   if (!isCurrent()) return;
-  showBrand(settings);
   applyTheme(theme);
+  showBrand(settings);
   showMenu(settings, category, gallery);
   const sectionTitle = settings.menu?.find(item => category ? item.id === category : gallery && item.kind === 'gallery')?.name;
   const heading = sectionTitle || (category ? 'Categoria de imóveis' : gallery ? 'Galeria' :
