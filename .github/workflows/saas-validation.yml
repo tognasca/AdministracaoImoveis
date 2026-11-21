@@ -82,13 +82,14 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/imoveis-browser" playwright@1.62.1
           "$RUNNER_TEMP/imoveis-browser/node_modules/.bin/playwright" install --with-deps chromium
           NODE_PATH="$RUNNER_TEMP/imoveis-browser/node_modules" node scripts/verificar-crm-navegador.cjs
-      - name: Verify isolation with two verified domains
+      - name: Verify multi-tenant isolation and publishable storefront package
         env:
           Admin__Password: ci_admin_password_long_enough_2026
           ConnectionStrings__Imoveis: Host=localhost;Port=5432;Database=imoveis_ci;Username=imoveis;Password=imoveis_ci_password
           ASPNETCORE_URLS: http://127.0.0.1:5100
           ASPNETCORE_ENVIRONMENT: Development
           Saas__EnableMultiTenant: 'true'
+          Saas__PublicCatalogBaseUrl: http://127.0.0.1:5100
           Saas__PlatformAdminKey: ci_platform_key_for_disposable_database_only
           IMOVEIS_PLATFORM_KEY: ci_platform_key_for_disposable_database_only
           Media__Path: /tmp/imoveis-ci-media
@@ -101,8 +102,10 @@ jobs:
           trap 'kill "$app_pid" 2>/dev/null || true' EXIT
           for i in $(seq 1 40); do
             if curl --fail --silent -H 'Host: imoveis-ci.test' http://127.0.0.1:5100/health; then
+              export IMOVEIS_EXTERNAL_ZIP="$RUNNER_TEMP/imoveis-vitrine.zip"
               node scripts/verificar-multiempresa.mjs
-              exit
+              NODE_PATH="$RUNNER_TEMP/imoveis-browser/node_modules" node scripts/verificar-vitrine-externa.cjs
+              exit 0
             fi
             if ! kill -0 "$app_pid" 2>/dev/null; then break; fi
             sleep 2

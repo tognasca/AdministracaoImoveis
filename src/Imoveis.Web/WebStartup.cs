@@ -57,6 +57,8 @@ static class WebStartup
             };
         });
         builder.Services.AddAuthorization();
+        builder.Services.AddCors(options => options.AddPolicy("PublicCatalog", policy =>
+            policy.AllowAnyOrigin().WithMethods(HttpMethods.Get)));
         if (Directory.Exists("/keys")) builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/keys"));
         builder.Services.AddRateLimiter(options =>
         {
@@ -93,6 +95,7 @@ static class WebStartup
         app.Use(TenantResolver.Resolve);
         app.UseStaticFiles(StaticAssets());
         app.UseRouting();
+        app.UseCors();
         app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();

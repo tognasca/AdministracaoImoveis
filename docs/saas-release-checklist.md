@@ -54,3 +54,27 @@ Use `PUT /api/platform/imobiliarias/{id}/estado` com `status` igual a
 - Ainda precisam de homologação visual os fluxos no desktop, smartphone e
   tablet, a revisão de fotos extraídas de PDFs por imóvel e os fluxos de
   operação do CRM e de domínios.
+
+## Vitrine na hospedagem do cliente
+
+Configure `SAAS_PUBLIC_CATALOG_BASE_URL` com a origem HTTPS da aplicação que
+atende o catálogo público, por exemplo `https://imoveis.suaempresa.com.br`.
+Com o modo multiempresa ativo, verifique também esse hostname na instalação.
+O domínio do site estático do cliente continua apontando para a hospedagem dele.
+
+No painel da imobiliária, abra **Configurações da vitrine** e escolha
+**Baixar arquivos da vitrine**. Extraia todos os arquivos na raiz ou em uma
+pasta, por exemplo `/imoveis/`, e mantenha-os juntos. O servidor do cliente
+só precisa servir HTML, CSS e JavaScript. O ZIP já inclui em
+`catalog-config.js` o endereço público da imobiliária. As alterações de
+imóveis e identidade visual feitas no painel são exibidas nas próximas
+consultas à API, sem baixar outro ZIP.
+
+Quem já tem um layout próprio pode usar os GETs de
+`/api/catalogo/{slug}/imoveis`, `/imoveis/tipos`,
+`/imoveis/{id}`, `/vitrine/configuracao` e `/vitrine/tema` sob o mesmo
+prefixo do catálogo. As fotos de imóveis usam
+`/api/catalogo/{slug}/media/{imovelId}/{fotoId}`. Os caminhos de logotipo e
+banner retornados pela configuração são relativos à origem da API. Essas
+rotas ficam disponíveis para leitura pública sem credenciais. Cadastros,
+CRM e configurações continuam no painel autenticado da plataforma.

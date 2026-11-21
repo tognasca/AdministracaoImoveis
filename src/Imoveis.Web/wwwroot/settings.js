@@ -23,6 +23,7 @@ export async function showSettings(isCurrent) {
   const allowed = getSession()?.administrator;
   const settings = allowed ? await request('/api/vitrine/configuracao') : null;
   const selectedTheme = allowed ? await request('/api/vitrine/tema') : null;
+  const external = allowed ? await request(endpoint + 'publicacao-externa') : null;
   if (!isCurrent()) return;
 
   app.innerHTML = adminNav() + '<h2>Configurações da vitrine</h2>' + notice +
@@ -44,6 +45,9 @@ export async function showSettings(isCurrent) {
       escape(settings.email) + '"></label><label>WhatsApp com código do país e DDD<input name="whatsapp" type="tel" inputmode="numeric" ' +
       'pattern="[0-9]{10,15}" maxlength="15" placeholder="5511999999999" value="' + escape(settings.whatsapp) + '"></label></div>' +
       '<div class="row"><button>Salvar identidade</button></div></form></section>' +
+      (external?.enabled ? '<section class="box"><h3>Vitrine na sua hospedagem</h3>' +
+        '<p>Extraia o ZIP na pasta onde deseja publicar a vitrine. Os imóveis e a identidade visual são carregados deste sistema.</p>' +
+        '<a class="btn" href="/api/admin/vitrine/pacote" download>Baixar arquivos da vitrine</a></section>' : '') +
       images.map(asset => imageForm(asset, settings[asset.key])).join('') :
       '<p>Acesso restrito a administradores.</p>');
   bindLogout();

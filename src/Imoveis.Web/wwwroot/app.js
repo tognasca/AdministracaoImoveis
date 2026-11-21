@@ -11,23 +11,9 @@ import {manageMenu} from './menu.js';
 import {staff} from './staff.js';
 import {crm} from './crm.js';
 
-const menuToggle = document.querySelector('#public-menu-toggle');
-const publicHeader = menuToggle.closest('header');
-function setPublicMenu(expanded) {
-  publicHeader.classList.toggle('menu-open', expanded);
-  menuToggle.setAttribute('aria-expanded', String(expanded));
-}
-menuToggle.onclick = () => setPublicMenu(menuToggle.getAttribute('aria-expanded') !== 'true');
-publicHeader.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || menuToggle.getAttribute('aria-expanded') !== 'true') return;
-  setPublicMenu(false);
-  menuToggle.focus();
-});
-document.querySelector('#public-menu').addEventListener('click', event => {
-  if (!event.target.closest('a') || menuToggle.getAttribute('aria-expanded') !== 'true') return;
-  setPublicMenu(false);
-  menuToggle.focus();
-});
+import {bindPublicMenu} from './public-menu.js';
+
+const setPublicMenu = bindPublicMenu();
 
 let navigation = 0;
 async function render() {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {request} from 'node:http';
+import {writeFile} from 'node:fs/promises';
 
 const base = process.env.IMOVEIS_URL ?? 'http://127.0.0.1:5100';
 const password = process.env.IMOVEIS_ADMIN_PASSWORD;
@@ -14,6 +15,7 @@ const second = company('outra-ci.test');
 async function call(tenant, path, status, method = 'GET', body, contentType = 'application/json') {
   const data = body === undefined ? undefined : Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
   const headers = {Host:tenant.host, 'X-Imoveis-Action':'1'};
+  if (tenant.origin) headers.Origin = tenant.origin;
   if (tenant.platformKey) headers['X-Saas-Platform-Key'] = tenant.platformKey;
   if (tenant.cookie) headers.Cookie = tenant.cookie;
   if (data) {
@@ -32,6 +34,10 @@ async function call(tenant, path, status, method = 'GET', body, contentType = 'a
     req.end(data);
   });
   assert.equal(response.status,status,tenant.host+' '+method+' '+path+' '+response.body.toString());
+  if (tenant.origin) {
+    assert.equal(response.headers['access-control-allow-origin'], path.startsWith('/api/catalogo/') ? '*' : undefined);
+    assert.equal(response.headers['access-control-allow-credentials'], undefined);
+  }
   if (response.headers['set-cookie']) tenant.cookie = response.headers['set-cookie'][0].split(';')[0];
   return response.headers['content-type']?.includes('application/json')
     ? JSON.parse(response.body) : response.body;
@@ -62,7 +68,7 @@ assert(exports.properties.some(item => item.id === secondId));
 assert(!exports.properties.some(item => item.id === firstId));
 assert(!(await call(second,'/api/imoveis',200)).some(item => item.id === firstId));
 
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC0lEQVR42mP8/x8AAwMCAAAAC0lEQVR42mP8/x8AAwMCAO7+jfcAAAAASUVORK5CYII=', 'base64');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUi6hgYGBgYmBgYGBgAAAKkADqFPYWGgAAAABJRU5ErkJggg==', 'base64');
 const upload = Buffer.concat([
   Buffer.from('--photo-boundary\r\nContent-Disposition: form-data; name="photo"; filename="photo.png"\r\nContent-Type: image/png\r\n\r\n'),
   png, Buffer.from('\r\n--photo-boundary--\r\n')
@@ -144,3 +150,35 @@ await call(created,admin+'/session',421);
 await call(operator,tenantPath+'/estado',204,'PUT',{status:'active'});
 await call(created,'/health',200);
 console.log('Cadastro, verificação de domínio, acesso do administrador inicial e suspensão verificados.');
+
+const catalog = '/api/catalogo/';
+const publicFirst = catalog + 'legacy';
+const publicSecond = catalog + 'homologacao';
+const visitor = {...company(first.host), origin:'https://www.imoveissp.test'};
+const {id:draftId} = await call(first,property,201,'POST',{...input,code:'RASCUNHO-EXTERNO',status:'Rascunho',notes:'Anotação interna'});
+await call(first,property+'/'+draftId+'/fotos',201,'POST',upload,multipart);
+const {photos:[draftPhoto]} = await call(first,property+'/'+draftId,200);
+const listings = await call(visitor,publicFirst+'/imoveis',200);
+assert(listings.some(item => item.id === firstId));
+assert(!listings.some(item => item.id === secondId || item.id === draftId));
+const {data:publicData} = await call(visitor,publicFirst+'/imoveis/'+firstId,200);
+assert(!('source' in publicData || 'notes' in publicData || 'version' in publicData));
+await call(visitor,publicSecond+'/imoveis/'+firstId,404);
+await call(visitor,publicFirst+'/imoveis/'+draftId,404);
+await call({...visitor,cookie:first.cookie},publicFirst+'/media/'+draftId+'/'+draftPhoto,404);
+await call(visitor,publicFirst+'/media/'+firstId+'/'+photo,200);
+await call(visitor,publicSecond+'/media/'+firstId+'/'+photo,404);
+const externalBrand = await call(visitor,publicFirst+'/vitrine/configuracao',200);
+assert.equal(externalBrand.name,'Imobiliária A');
+assert.equal(externalBrand.logo,publicFirst+'/media/vitrine/logo');
+await call(visitor,externalBrand.logo,200);
+assert.equal((await call(visitor,publicFirst+'/vitrine/tema',200)).template,'premium');
+assert.equal((await call(visitor,publicSecond+'/vitrine/configuracao',200)).name,'Imobiliária B');
+await call(operator,tenantPath+'/estado',204,'PUT',{status:'suspended'});
+await call(visitor,catalog+tenantInput.slug+'/imoveis',404);
+await call(visitor,catalog+'inexistente/imoveis',404);
+await call(visitor,admin+'/vitrine/pacote',401);
+const externalZip = await call(first,admin+'/vitrine/pacote',200);
+assert.equal(externalZip.subarray(0,4).toString('hex'),'504b0304');
+if (process.env.IMOVEIS_EXTERNAL_ZIP) await writeFile(process.env.IMOVEIS_EXTERNAL_ZIP,externalZip);
+console.log('Catálogo externo e pacote da vitrine verificados com isolamento, mídia pública e CORS.');

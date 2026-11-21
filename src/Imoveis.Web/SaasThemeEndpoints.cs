@@ -6,17 +6,8 @@ record ThemeView(string Template, string AccentColor);
 
 static class SaasThemeEndpoints
 {
-    public static void Map(WebApplication app, RouteGroupBuilder admin)
+    public static void Map(RouteGroupBuilder admin)
     {
-        app.MapGet("/api/vitrine/tema", async (NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
-        {
-            await using var query = db.CreateCommand("SELECT template,accent_color FROM saas_tenant_themes WHERE tenant_id=@tenant");
-            query.Parameters.AddWithValue("tenant", tenant.Id);
-            await using var reader = await query.ExecuteReaderAsync(ct);
-            return await reader.ReadAsync(ct)
-                ? Results.Ok(new ThemeView(reader.GetString(0),reader.GetString(1)))
-                : Results.Ok(new ThemeView("modern","#6B5140"));
-        });
         admin.MapPut("/vitrine/tema", async (ThemeInput input, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             if (input.Template is not ("modern" or "premium" or "commercial")
@@ -35,5 +26,15 @@ static class SaasThemeEndpoints
             await command.ExecuteNonQueryAsync(ct);
             return Results.NoContent();
         }).RequireAuthorization(policy => policy.RequireRole("Administrador"));
+    }
+
+    public static async Task<IResult> Read(NpgsqlDataSource db, Guid tenantId, CancellationToken ct)
+    {
+        await using var query = db.CreateCommand("SELECT template,accent_color FROM saas_tenant_themes WHERE tenant_id=@tenant");
+        query.Parameters.AddWithValue("tenant", tenantId);
+        await using var reader = await query.ExecuteReaderAsync(ct);
+        return await reader.ReadAsync(ct)
+            ? Results.Ok(new ThemeView(reader.GetString(0), reader.GetString(1)))
+            : Results.Ok(new ThemeView("modern", "#6B5140"));
     }
 }

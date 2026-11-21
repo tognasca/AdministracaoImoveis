@@ -1,5 +1,6 @@
 -- Run after fixtures-saas-isolation.sql against the disposable database.
 INSERT INTO saas_domains(hostname,tenant_id,verified_at) VALUES
+ ('127.0.0.1','00000000-0000-4000-8000-000000000001',now()),
  ('imoveis-ci.test','00000000-0000-4000-8000-000000000001',now()),
  ('outra-ci.test','00000000-0000-4000-8000-000000000002',now()),
  ('nao-verificado-ci.test','00000000-0000-4000-8000-000000000002',NULL);

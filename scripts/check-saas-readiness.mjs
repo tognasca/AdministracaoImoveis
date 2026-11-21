@@ -8,7 +8,7 @@ const checks = [
  ['ownership constraints', 'src/Imoveis.Web/Database/016-saas-ownership-constraints.sql', /saas_leads_property_same_tenant/],
  ['verified tenant domain', 'src/Imoveis.Web/TenantContext.cs', /d.verified_at IS NOT NULL/],
  ['CRM endpoint registration', 'src/Imoveis.Web/Program.cs', /LeadEndpoints\.Map\(admin\)/],
- ['theme endpoint registration', 'src/Imoveis.Web/Program.cs', /SaasThemeEndpoints\.Map\(app, admin\)/],
+ ['theme endpoint registration', 'src/Imoveis.Web/Program.cs', /SaasThemeEndpoints\.Map\(admin\)/],
  ['CRM navigation', 'src/Imoveis.Web/wwwroot/app.js', /await crm\(isCurrent\)/]
 ];
 let failed = 0;
