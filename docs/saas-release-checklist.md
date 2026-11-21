@@ -7,10 +7,29 @@ ativa. Isso inclui o hostname da imobiliária original. Hosts desconhecidos,
 não verificados e suspensos recebem HTTP 421.
 
 O proxy deve preservar o host aceito e encaminhar somente domínios da
-instalação. Confirme a titularidade de cada domínio antes de registrar a
-verificação. A branch ainda depende de provisionamento operacional de tenants,
-domínios e administrador inicial de novas imobiliárias. O bootstrap por
-`Admin__Password` cria somente o administrador da instalação original.
+instalação. O bootstrap por `Admin__Password` cria somente o administrador
+da instalação original.
+
+## Cadastro de uma imobiliária
+
+Configure `SAAS_PLATFORM_ADMIN_KEY` com uma chave aleatória de pelo menos
+32 caracteres. Faça as chamadas abaixo no hostname da instalação original
+com a sessão do administrador, o cabeçalho `X-Saas-Platform-Key` e
+`X-Imoveis-Action: 1` nas operações de escrita.
+
+1. Envie `POST /api/platform/imobiliarias` com `slug`, `name`, `username` e
+   `password`. O retorno inclui o identificador da imobiliária.
+2. Envie `POST /api/platform/imobiliarias/{id}/dominios` com `hostname`.
+   Solicite ao cliente a publicação do TXT retornado em `dnsRecord`.
+3. Consulte o DNS público e confira se o TXT publicado corresponde ao desafio.
+   Em seguida envie o valor observado como `dnsValue` no
+   `POST /api/platform/imobiliarias/{id}/dominios/{hostname}/verificacao`.
+   A API registra a confirmação feita pelo operador e consome o desafio.
+4. Configure a rota no proxy e o HTTPS para o novo hostname. Entre no painel
+   pelo hostname do cliente com o administrador inicial.
+
+Use `PUT /api/platform/imobiliarias/{id}/estado` com `status` igual a
+`suspended` ou `active` para bloquear ou restabelecer o acesso por domínio.
 
 ## Dados preservados
 

@@ -23,6 +23,7 @@ services:
       Admin__Password: ${ADMIN_PASSWORD:?Configure ADMIN_PASSWORD no .env}
       Vitrine__WhatsApp: ${VITRINE_WHATSAPP:-}
       Saas__EnableMultiTenant: ${SAAS_ENABLE_MULTI_TENANT:-false}
+      Saas__PlatformAdminKey: ${SAAS_PLATFORM_ADMIN_KEY:-}
       Saas__LegacyHostnames: ${SAAS_LEGACY_HOSTNAMES:-}
       Media__Path: /media/imoveis
     ports:

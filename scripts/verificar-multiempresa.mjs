@@ -6,12 +6,15 @@ const password = process.env.IMOVEIS_ADMIN_PASSWORD;
 assert(password, 'Configure IMOVEIS_ADMIN_PASSWORD.');
 
 const company = host => ({host, cookie:undefined});
+const platformKey = process.env.IMOVEIS_PLATFORM_KEY;
+assert(platformKey, 'Configure IMOVEIS_PLATFORM_KEY.');
 const first = company('imoveis-ci.test');
 const second = company('outra-ci.test');
 
 async function call(tenant, path, status, method = 'GET', body, contentType = 'application/json') {
   const data = body === undefined ? undefined : Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body));
   const headers = {Host:tenant.host, 'X-Imoveis-Action':'1'};
+  if (tenant.platformKey) headers['X-Saas-Platform-Key'] = tenant.platformKey;
   if (tenant.cookie) headers.Cookie = tenant.cookie;
   if (data) {
     headers['Content-Type'] = contentType;
@@ -112,3 +115,32 @@ await call(second,importPath+'/confirmacao',409,'POST',{
 const [matched] = await call(second,importPath+'/conferencia',200,'POST',{source:input.source,codes:[input.code]});
 assert.equal(matched.id,secondId);
 console.log('Isolamento de duas imobiliárias verificado por domínio, sessão, imóveis, fotos, exportação, usuários, CRM, vitrine e importação.');
+
+const operator = {...first, platformKey};
+const platform = '/api/platform/imobiliarias';
+const tenantInput = {
+  slug:'provisionamento-ci', name:'Imobiliária provisionada', username:'admin',
+  password:'nova_senha_exclusiva_de_teste_2026'
+};
+await call(first,platform,404,'POST',tenantInput);
+await call({...second,platformKey},platform,403,'POST',tenantInput);
+const {id:tenantId} = await call(operator,platform,201,'POST',tenantInput);
+await call(operator,platform,409,'POST',tenantInput);
+const tenantPath = platform+'/'+tenantId;
+const created = company('provisionamento-ci.test');
+const {dnsRecord,dnsValue} = await call(operator,tenantPath+'/dominios',200,'POST',{hostname:created.host});
+assert.equal(dnsRecord,'_imoveis-saas.'+created.host);
+assert.match(dnsValue,/^imoveis-verify=[0-9a-f]{64}$/);
+await call(created,'/health',421);
+const verification = tenantPath+'/dominios/'+created.host+'/verificacao';
+await call(operator,verification,409,'POST',{dnsValue:'imoveis-verify='+('0'.repeat(64))});
+await call(created,'/health',421);
+await call(operator,verification,204,'POST',{dnsValue});
+await call(operator,verification,409,'POST',{dnsValue});
+await call(created,admin+'/login',204,'POST',{username:tenantInput.username,password:tenantInput.password});
+assert.deepEqual(await call(created,'/api/imoveis',200),[]);
+await call(operator,tenantPath+'/estado',204,'PUT',{status:'suspended'});
+await call(created,admin+'/session',421);
+await call(operator,tenantPath+'/estado',204,'PUT',{status:'active'});
+await call(created,'/health',200);
+console.log('Cadastro, verificação de domínio, acesso do administrador inicial e suspensão verificados.');

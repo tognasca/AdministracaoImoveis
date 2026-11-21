@@ -89,6 +89,8 @@ jobs:
           ASPNETCORE_URLS: http://127.0.0.1:5100
           ASPNETCORE_ENVIRONMENT: Development
           Saas__EnableMultiTenant: 'true'
+          Saas__PlatformAdminKey: ci_platform_key_for_disposable_database_only
+          IMOVEIS_PLATFORM_KEY: ci_platform_key_for_disposable_database_only
           Media__Path: /tmp/imoveis-ci-media
           IMOVEIS_URL: http://127.0.0.1:5100
           IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026

@@ -11,6 +11,7 @@ static class SaasAdministrationEndpoints
 {
     private sealed record TenantRequest(string Slug, string Name, string Username, string Password);
     private sealed record DomainRequest(string Hostname);
+    private sealed record DomainVerificationRequest(string DnsValue);
     private sealed record TenantStateRequest(string Status);
     private static readonly Regex SlugPattern = new("^[a-z0-9]+(-[a-z0-9]+)*$", RegexOptions.Compiled);
 
@@ -97,6 +98,38 @@ static class SaasAdministrationEndpoints
             return Results.Ok(new { hostname, dnsRecord = "_imoveis-saas." + hostname,
                 dnsType = "TXT", dnsValue = "imoveis-verify=" + token,
                 instructions = "Publique o registro TXT DNS. Um operador deverá validar a titularidade antes de ativar o domínio." });
+        });
+
+        group.MapPost("/imobiliarias/{id:guid}/dominios/{hostname}/verificacao", async (
+            Guid id, string hostname, DomainVerificationRequest input, ClaimsPrincipal principal,
+            NpgsqlDataSource db, CancellationToken ct) =>
+        {
+            hostname = hostname.Trim().TrimEnd('.').ToLowerInvariant();
+            const string prefix = "imoveis-verify=";
+            if (input.DnsValue is not { } value || value.Length != prefix.Length + 64
+                || !value.StartsWith(prefix, StringComparison.Ordinal))
+                return Results.BadRequest("Informe o valor TXT observado no DNS.");
+
+            // The authorized platform operator attests to the public DNS lookup.
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value[prefix.Length..])))
+                .ToLowerInvariant();
+            await using var connection = await db.OpenConnectionAsync(ct);
+            await using var transaction = await connection.BeginTransactionAsync(ct);
+            await using var command = new NpgsqlCommand("""
+                UPDATE saas_domains AS d
+                SET verified_at = now(), verification_token_hash = NULL
+                FROM saas_tenants AS t
+                WHERE d.tenant_id = t.id AND t.id = @tenant AND t.status = 'active'
+                    AND d.hostname = @host AND d.verified_at IS NULL AND d.verification_token_hash = @hash
+                """, connection, transaction);
+            command.Parameters.AddWithValue("tenant", id);
+            command.Parameters.AddWithValue("host", hostname);
+            command.Parameters.AddWithValue("hash", hash);
+            if (await command.ExecuteNonQueryAsync(ct) == 0)
+                return Results.Conflict("O desafio DNS não corresponde a um domínio pendente desta imobiliária.");
+            await Audit(connection, transaction, id, principal, "domain_verified", hostname, ct);
+            await transaction.CommitAsync(ct);
+            return Results.NoContent();
         });
 
         group.MapPut("/imobiliarias/{id:guid}/estado", async (Guid id, TenantStateRequest input,

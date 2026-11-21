@@ -80,7 +80,8 @@ static class WebStartup
             context.Response.Headers["Referrer-Policy"] = "same-origin";
             if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/media"))
                 context.Response.Headers["Cache-Control"] = "no-store";
-            if (context.Request.Path.StartsWithSegments("/api/admin")
+            if ((context.Request.Path.StartsWithSegments("/api/admin")
+                || context.Request.Path.StartsWithSegments("/api/platform"))
                 && !HttpMethods.IsGet(context.Request.Method)
                 && context.Request.Headers["X-Imoveis-Action"] != "1")
             {
