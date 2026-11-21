@@ -17,6 +17,8 @@ static class WebStartup
             ?? throw new InvalidOperationException("Configure ConnectionStrings__Imoveis.");
 
         builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<TenantContext>();
         builder.Services.AddSingleton<PropertyStore>();
         builder.Services.AddSingleton<StaffStore>();
         builder.Services.AddSingleton<MediaStore>();
@@ -34,9 +36,11 @@ static class WebStartup
             options.Events.OnValidatePrincipal = async context =>
             {
                 var identity = context.Principal;
+                var tenant = context.HttpContext.RequestServices.GetRequiredService<TenantContext>();
                 var staff = context.HttpContext.RequestServices.GetRequiredService<StaffStore>();
                 if (!Guid.TryParse(identity?.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-                    || await staff.Find(id, context.HttpContext.RequestAborted) is not { Active: true } user
+                    || TenantContext.AuthenticatedTenant(identity!) != tenant.Id
+                    || await staff.Find(id, context.HttpContext.RequestAborted, tenant.Id) is not { Active: true } user
                     || !identity!.IsInRole(user.Role))
                     context.RejectPrincipal();
             };
@@ -53,6 +57,8 @@ static class WebStartup
             };
         });
         builder.Services.AddAuthorization();
+        builder.Services.AddCors(options => options.AddPolicy("PublicCatalog", policy =>
+            policy.AllowAnyOrigin().WithMethods(HttpMethods.Get)));
         if (Directory.Exists("/keys")) builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/keys"));
         builder.Services.AddRateLimiter(options =>
         {
@@ -76,7 +82,8 @@ static class WebStartup
             context.Response.Headers["Referrer-Policy"] = "same-origin";
             if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/media"))
                 context.Response.Headers["Cache-Control"] = "no-store";
-            if (context.Request.Path.StartsWithSegments("/api/admin")
+            if ((context.Request.Path.StartsWithSegments("/api/admin")
+                || context.Request.Path.StartsWithSegments("/api/platform"))
                 && !HttpMethods.IsGet(context.Request.Method)
                 && context.Request.Headers["X-Imoveis-Action"] != "1")
             {
@@ -85,8 +92,10 @@ static class WebStartup
             }
             await next();
         });
+        app.Use(TenantResolver.Resolve);
         app.UseStaticFiles(StaticAssets());
         app.UseRouting();
+        app.UseCors();
         app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();

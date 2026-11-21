@@ -9,24 +9,11 @@ import {storefront, details} from './storefront.js';
 import {editor} from './editor.js';
 import {manageMenu} from './menu.js';
 import {staff} from './staff.js';
+import {crm} from './crm.js';
 
-const menuToggle = document.querySelector('#public-menu-toggle');
-const publicHeader = menuToggle.closest('header');
-function setPublicMenu(expanded) {
-  publicHeader.classList.toggle('menu-open', expanded);
-  menuToggle.setAttribute('aria-expanded', String(expanded));
-}
-menuToggle.onclick = () => setPublicMenu(menuToggle.getAttribute('aria-expanded') !== 'true');
-publicHeader.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || menuToggle.getAttribute('aria-expanded') !== 'true') return;
-  setPublicMenu(false);
-  menuToggle.focus();
-});
-document.querySelector('#public-menu').addEventListener('click', event => {
-  if (!event.target.closest('a') || menuToggle.getAttribute('aria-expanded') !== 'true') return;
-  setPublicMenu(false);
-  menuToggle.focus();
-});
+import {bindPublicMenu} from './public-menu.js';
+
+const setPublicMenu = bindPublicMenu();
 
 let navigation = 0;
 async function render() {
@@ -36,7 +23,7 @@ async function render() {
   const [path,query] = location.hash.slice(1).split('?');
   const directRoute = {'/admin':'admin','/admin/importacoes':'importar'}[location.pathname.replace(/\/$/,'')];
   const [route,id] = (path || directRoute || '').split('/');
-  const adminRoute = ['admin','editar','importar','pdf','usuarios','configuracoes','menu'].includes(route);
+  const adminRoute = ['admin','editar','importar','pdf','usuarios','configuracoes','menu','crm'].includes(route);
   document.body.classList.toggle('estate-site', !adminRoute);
   app.innerHTML = '<p>Carregando…</p>';
   window.scrollTo(0, 0);
@@ -46,7 +33,9 @@ async function render() {
       if (!isCurrent()) return;
       setSession(currentSession);
     }
-    if (route === 'menu') {
+    if (route === 'crm') {
+      await crm(isCurrent);
+    } else if (route === 'menu') {
       await manageMenu(isCurrent);
     } else if (route === 'configuracoes') {
       await showSettings(isCurrent);

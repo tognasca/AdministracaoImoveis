@@ -1,6 +1,6 @@
-import {app, escape, link, money} from './ui.js';
+import {app, escape, money} from './ui.js';
 import {storefrontTheme} from './storefront-theme.js';
-import {request} from './api.js';
+import {catalogRequest, catalogMedia, catalogPhoto, storefrontHref, storefrontLink} from './public-catalog.js';
 import {kindSelect} from './property-kinds.js';
 import {propertyDetail} from './property-detail.js';
 
@@ -11,7 +11,6 @@ const filters = [
   ['bedrooms', 'Mínimo de dormitórios', 'type="number" min="0" max="1000" placeholder="Qualquer"']
 ];
 
-const photoUrl = (id, photo) => '/media/' + encodeURIComponent(id) + '/' + encodeURIComponent(photo);
 const locationLabel = data => [data.district, data.city].filter(Boolean).map(escape).join(' · ');
 const facts = data => [
   data.bedrooms > 0 ? data.bedrooms + (data.bedrooms === 1 ? ' dormitório' : ' dormitórios') : '',
@@ -19,11 +18,11 @@ const facts = data => [
 ].filter(Boolean);
 function listingCard(home) {
   const d = home.data;
-  const href = '/#imovel/' + encodeURIComponent(home.id);
+  const href = storefrontHref('imovel/' + encodeURIComponent(home.id));
   const features = facts(d);
   const place = locationLabel(d);
   const photo = home.photos[0];
-  const cover = photo ? '<img class="listing-image" src="' + escape(photoUrl(home.id, photo)) +
+  const cover = photo ? '<img class="listing-image" src="' + escape(catalogPhoto(home.id, photo)) +
     '" alt="" loading="lazy" decoding="async">' : '<span class="listing-placeholder">Sem foto cadastrada</span>';
   return '<article class="listing-card"><a class="listing-link" href="' + href + '">' +
     '<div class="listing-cover' + (photo ? '' : ' listing-cover-empty') + '">' + cover +
@@ -36,14 +35,22 @@ function listingCard(home) {
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }
 
+function applyTheme(theme) {
+  const selected = ['modern','premium','commercial'].includes(theme?.template) ? theme.template : 'modern';
+  document.body.dataset.estateTemplate = selected;
+  document.body.dataset.estateAccent = /^#[0-9a-fA-F]{6}$/.test(theme?.accentColor ?? '') ? theme.accentColor : '';
+  if (document.body.dataset.estateAccent)
+    document.body.style.setProperty('--estate-accent',document.body.dataset.estateAccent);
+}
 function showBrand(settings) {
   const theme = storefrontTheme(settings);
-  document.body.style.setProperty('--estate-accent', theme.background);
+  if (!/^#[0-9a-fA-F]{6}$/.test(document.body.dataset.estateAccent ?? ''))
+    document.body.style.setProperty('--estate-accent', theme.background);
   document.body.style.setProperty('--estate-on-accent', theme.foreground);
   document.body.style.setProperty('--estate-accent-shade', theme.shade);
   const name = settings.name || 'Imóveis Cotia';
   document.title = name;
-  const brandMarkup = (settings.logo ? '<img class="site-logo" src="' + escape(settings.logo) + '" alt="">' : '') +
+  const brandMarkup = (settings.logo ? '<img class="site-logo" src="' + escape(catalogMedia(settings.logo)) + '" alt="">' : '') +
     '<span>' + escape(name) + '</span>';
   document.querySelector('header .brand').innerHTML = brandMarkup;
   document.querySelector('.footer-brand').innerHTML = brandMarkup;
@@ -53,10 +60,10 @@ function showMenu(settings, category, gallery) {
   const items = settings.menu ?? [];
   const menuMarkup = items.map(item => {
     if (item.kind === 'category')
-      return '<a href="/#vitrine?category=' + encodeURIComponent(item.id) + '"' +
+      return '<a href="' + storefrontHref('vitrine?category=' + encodeURIComponent(item.id)) + '"' +
         (item.id === category ? ' aria-current="page"' : '') + '>' + escape(item.name) + '</a>';
     if (item.kind === 'gallery')
-      return '<a href="/#vitrine?gallery=true"' + (gallery ? ' aria-current="page"' : '') + '>' + escape(item.name) + '</a>';
+      return '<a href="' + storefrontHref('vitrine?gallery=true') + '"' + (gallery ? ' aria-current="page"' : '') + '>' + escape(item.name) + '</a>';
     if (item.kind === 'contact' && settings.whatsapp)
       return '<a href="https://wa.me/' + escape(settings.whatsapp) + '" target="_blank" rel="noopener noreferrer">' +
         escape(item.name) + '</a>';
@@ -78,12 +85,14 @@ export async function storefront(params, isCurrent) {
   const gallery = !category && params.get('gallery') === 'true';
   const section = new URLSearchParams(category ? {category} : gallery ? {gallery:'true'} : {});
   const query = next => new URLSearchParams([...section, ...values, ['page', String(next)]]);
-  const [homes, settings, kinds] = await Promise.all([
-    request('/api/imoveis?' + query(page)),
-    request('/api/vitrine/configuracao').catch(() => ({})),
-    request('/api/imoveis/tipos').catch(() => [])
+  const [homes, settings, kinds, theme] = await Promise.all([
+    catalogRequest('/api/imoveis?' + query(page)),
+    catalogRequest('/api/vitrine/configuracao').catch(() => ({})),
+    catalogRequest('/api/imoveis/tipos').catch(() => []),
+    catalogRequest('/api/vitrine/tema').catch(() => ({template:'modern'}))
   ]);
   if (!isCurrent()) return;
+  applyTheme(theme);
   showBrand(settings);
   showMenu(settings, category, gallery);
   const sectionTitle = settings.menu?.find(item => category ? item.id === category : gallery && item.kind === 'gallery')?.name;
@@ -92,7 +101,7 @@ export async function storefront(params, isCurrent) {
 
   const banner = settings.banner;
   app.innerHTML = '<section class="estate-hero' + (banner ? '' : ' estate-hero-plain') + '">' +
-    (banner ? '<div class="estate-banner"><img src="' + escape(banner) + '" alt="" fetchpriority="high"></div>' : '') +
+    (banner ? '<div class="estate-banner"><img src="' + escape(catalogMedia(banner)) + '" alt="" fetchpriority="high"></div>' : '') +
     '<div class="estate-hero-copy"><h1>Encontre seu próximo imóvel</h1>' +
     '<form class="estate-search" id="search" aria-label="Filtrar imóveis">' +
     filters.map(([key,label,attributes]) => '<label>' + label + (key === 'kind'
@@ -102,11 +111,11 @@ export async function storefront(params, isCurrent) {
     '<button type="submit">Buscar imóveis</button></form></div></section>' +
     '<section id="resultados" class="estate-results" aria-labelledby="listing-title"><div class="estate-section-head">' +
     '<h2 id="listing-title" tabindex="-1">' + escape(heading) + '</h2>' +
-    (values.size ? '<a class="listing-action" href="/#vitrine?' + escape(section.toString()) + '">Limpar filtros</a>' : '') + '</div>' +
+    (values.size ? '<a class="listing-action" href="' + storefrontHref('vitrine?' + section.toString()) + '">Limpar filtros</a>' : '') + '</div>' +
     (homes.length ? '<div class="estate-grid">' + homes.map(listingCard).join('') + '</div>' :
       '<p class="estate-empty">' + (values.size || category || gallery ? 'Nenhum imóvel nesta seleção.' : 'Ainda não há imóveis publicados.') + '</p>') +
-    '<div class="row estate-pages">' + (page > 1 ? link('Página anterior', 'vitrine?' + query(page-1), true) : '') +
-    (homes.length === 30 ? link('Próxima página', 'vitrine?' + query(page+1), true) : '') + '</div></section>';
+    '<div class="row estate-pages">' + (page > 1 ? storefrontLink('Página anterior', 'vitrine?' + query(page-1)) : '') +
+    (homes.length === 30 ? storefrontLink('Próxima página', 'vitrine?' + query(page+1)) : '') + '</div></section>';
 
   const results = document.querySelector('#listing-title');
   function showResults() {
@@ -124,11 +133,13 @@ export async function storefront(params, isCurrent) {
 }
 
 export async function details(id, isCurrent) {
-  const [home,settings] = await Promise.all([
-    request('/api/imoveis/' + encodeURIComponent(id)),
-    request('/api/vitrine/configuracao').catch(() => ({}))
+  const [home,settings,theme] = await Promise.all([
+    catalogRequest('/api/imoveis/' + encodeURIComponent(id)),
+    catalogRequest('/api/vitrine/configuracao').catch(() => ({})),
+    catalogRequest('/api/vitrine/tema').catch(() => ({template:'modern'}))
   ]);
   if (!isCurrent()) return;
+  applyTheme(theme);
   showBrand(settings);
   showMenu(settings);
   propertyDetail(home, settings, locationLabel(home.data));

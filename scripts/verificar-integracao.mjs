@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { get as httpGet } from 'node:http';
+import { get as httpsGet } from 'node:https';
 
 const base = process.env.IMOVEIS_URL ?? 'http://localhost:5086';
 const password = process.env.IMOVEIS_ADMIN_PASSWORD;
 if (!password) throw Error('Configure IMOVEIS_ADMIN_PASSWORD para executar o teste.');
 let cookie;
+const login = '/api/admin/login';
+const session = '/api/admin/session';
 async function call(path, method = 'GET', body, expected = 200) {
   const headers = {'X-Imoveis-Action':'1'};
   if (cookie) headers.Cookie = cookie;
@@ -21,6 +25,8 @@ const admin = '/api/admin/imoveis';
 await call('/health');
 assert.match(await (await call('/')).text(), /id="app"/);
 const assets = '/api/vitrine/recursos';
+assert.match(await (await call("/")).text(), /"\/api\/vitrine\/recursos\/js\/crm\.js": "\/api\/vitrine\/recursos\/js\/crm"/);
+assert.match(await (await call(assets + "/js/crm")).text(), /export async function crm/);
 for (const name of ['styles', 'storefront', 'property-detail']) {
   const response = await call(assets + '/css/' + name);
   assert.match(response.headers.get('content-type'), /^text\/css/);
@@ -30,14 +36,51 @@ await call(assets + '/js/inexistente', 'GET', undefined, 404);
 await call('/api/rota-inexistente', 'GET', undefined, 404);
 assert.match(await (await call('/admin/importacoes')).text(), /src="\/api\/vitrine\/recursos\/js\/app"/);
 await call(admin,'GET',undefined,401);
-await call('/api/admin/login','POST',{username:'admin',password},204);
+await call(login,'POST',{username:'admin',password},204);
+if (process.env.IMOVEIS_EXPECT_LEGACY_FIXTURE === '1') {
+  const legacy = await call('/api/imoveis/00000000-0000-4000-8000-000000000071');
+  assert.equal(legacy.data.code,'LEG-1');
+  assert.equal(legacy.data.categoryId,'00000000-0000-4000-8000-000000000001');
+  assert.equal((await call('/api/vitrine/configuracao')).name,'Imobiliária anterior');
+  assert.equal((await call('/api/admin/importacoes/modelos/'+'c'.repeat(64)))[0].source,'Cadastro anterior');
+  const entry = (await call('/api/admin/importacoes/historico')).find(item=>item.filename==='anterior.csv');
+  assert.equal(await (await call('/api/admin/importacoes/historico/'+entry.id+'/arquivo')).text(),'ABC');
+}
 const code = 'VALIDACAO-'+Date.now();
+const adminCookie = cookie;
+const users = '/api/admin/usuarios';
+const operator = { username: 'operador-' + code, password, role: 'Operador' };
+await call(users, 'POST', operator, 204);
+const staff = await call(users);
+const operatorId = staff.find(user => user.username === operator.username).id;
+cookie = undefined;
+await call(login, 'POST', operator, 204);
+const operatorCookie = cookie;
+assert.equal((await call(session)).administrator, false);
+await call(users, 'GET', undefined, 403);
+cookie = adminCookie;
+await call(users + '/' + operatorId, 'PUT', { active: false }, 204);
+cookie = operatorCookie;
+await call(session, 'GET', undefined, 401);
+cookie = adminCookie;
+await call(users + '/' + operatorId, 'PUT', { active: true }, 204);
 const data = {code,source:'Teste de integração',title:'Imóvel de teste '+code,kind:'Casa',district:'Centro',city:'Cotia',zone:'Zona Oeste',
   price:550000,bedrooms:2,size:95,status:'Rascunho',album:'https://example.com/album',version:0,notes:'Confirmar disponibilidade antes da visita.'};
 await call(admin,'POST',{...data,zone:'Zona inexistente'},400);
 const {id} = await call(admin,'POST',data,201);
 const storefront = '/api/imoveis?q=' + encodeURIComponent(code);
 try {
+  const leads = '/api/admin/crm/leads';
+  const lead = { propertyId: id, name: code, status: 'new', assignedTo: operatorId };
+  const { id: leadId } = await call(leads, 'POST', lead, 201);
+  await call(leads + '/' + leadId, 'PUT', { ...lead, status: 'visit' }, 204);
+  assert((await call(leads + '?status=visit')).some(item =>
+    item.id === leadId && item.propertyId === id && item.assignedTo === operatorId));
+  const exports = '/api/admin/exportacoes/imoveis?format=';
+  assert((await call(exports + 'json')).properties.some(item => item.id === id));
+  for (const format of ['csv', 'xml']) {
+    assert((await (await call(exports + format)).text()).includes(code));
+  }
   assert.deepEqual(await call(storefront), []);
   await call('/api/imoveis/'+id,'GET',undefined,404);
   const upload = () => {
@@ -75,10 +118,24 @@ try {
   assert.equal(published.data.status,'Publicado');
   await call(endpoint+'/confirmacao','POST',{source:data.source,filename:'validacao.csv',rows:[row]},409);
   await call('/media/'+id+'/'+published.photos[0]);
+  const sessionUrl = new URL(session, base);
+  const get = sessionUrl.protocol === 'https:' ? httpsGet : httpGet;
+  const unknownDomainStatus = await new Promise((resolve, reject) => {
+    get(sessionUrl, { headers: { Host: 'unknown.imoveis-ci.test', Cookie: cookie } }, response => {
+      response.resume();
+      resolve(response.statusCode);
+    }).on('error', reject);
+  });
+  assert.equal(unknownDomainStatus, 421);
+  const isolated = '/api/admin/importacoes';
+  assert(!(await call(isolated + '/historico')).some(item => item.filename === 'outro-tenant.csv'));
+  await call(isolated + '/historico/94001/arquivo', 'GET', undefined, 404);
+  assert(!(await call(isolated + '/modelos')).some(item => item.source === 'Outro tenant'));
+  assert.deepEqual(await call(isolated + '/modelos/' + 'b'.repeat(64)), []);
   await call('/api/admin/logout','POST',undefined,204);
   cookie = undefined;
   await call(endpoint+'/modelos','GET',undefined,401);
-  await call('/api/admin/login','POST',{username:'admin',password},204);
+  await call(login,'POST',{username:'admin',password},204);
   const models = await call(endpoint+'/modelos');
   assert(models.some(model=>model.signature===signature && model.source===data.source && model.mappedFields===2));
   const model = (await call(endpoint+'/modelos/'+signature)).find(model=>model.source===data.source);

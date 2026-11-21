@@ -31,7 +31,7 @@ export function readPdfBlock(text) {
 
 export function classifyPdfPages(pages, model = 'auto') {
   const selected = model === 'auto' ? detectPdfModel(pages) : model;
-  const result = selected === 'kallas' ? classifyKallasPages(pages) : classifyGenericPages(pages);
+  const result = (selected === 'kallas' || selected === 'catalog') ? classifyKallasPages(pages) : classifyGenericPages(pages);
   return {...result, model:selected};
 }
 
@@ -132,13 +132,24 @@ export function pdfRowCells(data, mapping) {
   });
 }
 
+// Recognize catalog variants without assuming one supplier's fixed column layout.
+const normalizedCatalogLabel = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const catalogHeader = line => {
+  const value = normalizedCatalogLabel(line);
+  return /metragem|area/.test(value) && /dorm|quarto|suite/.test(value) && /vaga/.test(value);
+};
 const projectPattern = /^(.+?)\s{2,}((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}|PRONTO)\s{2,}(.+)$/i;
 const optionPattern = /^(.*?)\s{2,}(.*?)\s{2,}(.*?)\s+R\$\s*([\d.,]+)/i;
 
 export function detectPdfModel(pages) {
   const text = pages.join('\n');
-  return /\b(?:KALLAS|KAZZAS)\b/i.test(text) &&
-    /Empreend\./i.test(text) && /A partir de/i.test(text) ? 'kallas' : 'generic';
+  // Prefer structural evidence over supplier names. Other developers use the same
+  // project / delivery / address / variant layout under different branding.
+  const headers = (text.match(/Empreend\.?[^\n]*Entrega[^\n]*Endere[cç]o/gi) ?? []).length;
+  const variants = (text.match(/(?:Metragem|[ÁA]rea)[^\n]*(?:Dorms?|Quartos?)[^\n]*Vagas?/gi) ?? []).length;
+  if (headers >= 2 && variants >= 2) return 'catalog';
+  if (headers && variants && /\b(?:kallas|kazzas)\b/i.test(text)) return 'kallas';
+  return 'generic';
 }
 
 function catalogNumber(value) {
@@ -183,7 +194,7 @@ function classifyKallasPages(pages) {
         information.push({page:index+1,text:line,data:{}});
         continue;
       }
-      if (/METRAGEM.*DORMS.*VAGAS/i.test(line) && pendingMetadata) {
+      if (catalogHeader(line) && pendingMetadata) {
         if (pendingName) project = {name:pendingName,...pendingMetadata};
         pendingMetadata = null;
       } else if (pendingMetadata) {

@@ -193,3 +193,20 @@
 .estate-site #public-menu [aria-current="page"] { text-decoration: underline; }
 
 .estate-search :is(input, select) { background: #fffdf8; color: #171613; }
+
+/* Independent storefront presentations, selectable per tenant once tenant routing is enabled. */
+.estate-site[data-estate-template="premium"] {
+  --estate-paper:#181a19; --estate-ink:#f4eadb; --estate-rule:#5c5549;
+  --estate-gold:#d4b77d; color:#f4eadb;
+}
+.estate-site[data-estate-template="premium"] .estate-results,
+.estate-site[data-estate-template="premium"] .estate-section-head h2 { color:#f4eadb; }
+.estate-site[data-estate-template="premium"] .listing-facts { color:#c8c2b5; }
+.estate-site[data-estate-template="premium"] .estate-empty { background:#242622; color:#f4eadb; }
+.estate-site[data-estate-template="premium"] .estate-hero h1 { letter-spacing:-.045em; }
+.estate-site[data-estate-template="commercial"] {
+  --estate-paper:#eef3f8; --estate-ink:#18344e; --estate-rule:#cbd9e6;
+}
+.estate-site[data-estate-template="commercial"] .listing-cover { min-height:clamp(230px,28vw,380px); }
+.estate-site[data-estate-template="commercial"] .listing-card h3 { font-family:system-ui,sans-serif; font-size:clamp(1.4rem,2.4vw,2.1rem); font-weight:700; }
+.estate-site[data-estate-template="commercial"] .estate-hero h1 { font-family:system-ui,sans-serif; font-weight:750; }

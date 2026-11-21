@@ -27,9 +27,9 @@ export function mountPdfImport(isCurrent) {
   function choose(message = '') {
     file = undefined; rows = []; information = []; source = ''; model = 'generic';
     shell('<form id="pdf-upload" class="box"><label>Arquivo PDF<input name="file" type="file" accept=".pdf,application/pdf" required></label>' +
-      '<label>Modelo de leitura<select name="model"><option value="auto">Identificar automaticamente</option>' +
+      '<label>Modo de leitura (opcional)<select name="model"><option value="auto">Automático — recomendado para qualquer fornecedor</option>' +
       '<option value="kallas">Tabelão de empreendimentos Kallas e Kazzas</option><option value="generic">Tabelas por cabeçalho e texto corrido</option></select></label>' +
-      '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas. Nas tabelas, os cabeçalhos orientam o preenchimento: Valor → Preço, Metragem → Área, Dorms → Dormitórios. Confira os valores na grade antes de importar.</p><button>Extrair texto</button></form>' +
+      '<p class="muted">PDF com texto selecionável, até 8 MB e 100 páginas. O modo automático analisa os blocos e cabeçalhos, sem exigir planilha padrão. Nas tabelas, os cabeçalhos orientam o preenchimento: Valor → Preço, Metragem → Área, Dorms → Dormitórios. Confira os valores na grade antes de importar.</p><button>Extrair texto</button></form>' +
       '<section class="box"><h3>Retomar uma revisão pelo Excel</h3><label>Excel corrigido (.xlsx)<input id="pdf-corrected" type="file" accept=".xlsx"></label><p class="muted">Use a planilha exportada nesta tela para continuar a conferência.</p></section>');
     if (message) report(message);
     app.querySelector('#pdf-corrected').onchange = event => loadCorrections(event.target.files[0]);
@@ -99,7 +99,7 @@ export function mountPdfImport(isCurrent) {
       }).join('') + '</tr>').join('');
     shell('<form id="pdf-review"><section class="box"><h3>'+escape(file.name)+'</h3>' +
       '<label>Origem dos códigos<input name="source" required maxlength="100" value="'+escape(source)+'"></label>' +
-      (model === 'kallas' ? '<p class="notice">Modelo Kallas e Kazzas. Cada metragem e preço corresponde a uma opção de empreendimento. ' +
+      ((model === 'kallas' || model === 'catalog') ? '<p class="notice">Catálogo com múltiplos empreendimentos. Cada metragem e preço corresponde a uma opção de empreendimento. ' +
       'Os códigos ausentes são gerados automaticamente. Confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
       'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +

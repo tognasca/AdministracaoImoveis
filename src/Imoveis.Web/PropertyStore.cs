@@ -12,20 +12,21 @@ sealed class PropertyStore(NpgsqlDataSource db)
         ARRAY(SELECT id FROM photos WHERE property_id=p.id ORDER BY slot), p.zone
         """;
 
-    public async Task<List<Property>> Get(bool admin, Guid? id, string search, int page, CancellationToken ct, string kind = "", decimal maxPrice = 0, int bedrooms = 0, Guid? category = null, bool gallery = false)
+    public async Task<List<Property>> Get(bool admin, Guid? id, string search, int page, CancellationToken ct, string kind = "", decimal maxPrice = 0, int bedrooms = 0, Guid? category = null, bool gallery = false, Guid? tenantId = null)
     {
         await using var command = db.CreateCommand($"""
             SELECT {Columns} FROM properties p
-            WHERE (@admin OR status='Publicado') AND (@all OR p.id=@id)
+            WHERE p.tenant_id=@tenant AND (@admin OR status='Publicado') AND (@all OR p.id=@id)
               AND (@search='' OR concat_ws(' ',title,city,district,zone,code) ILIKE @pattern)
               AND (@kind='' OR lower(kind)=lower(@kind))
               AND (@max_price=0 OR price<=@max_price)
               AND (@bedrooms=0 OR bedrooms>=@bedrooms)
               AND (@category IS NULL OR EXISTS (
-                  SELECT 1 FROM storefront_menu m WHERE m.id=@category AND m.id=p.category_id AND m.visible AND m.kind='category'))
+                  SELECT 1 FROM storefront_menu m WHERE m.id=@category AND m.id=p.category_id AND m.tenant_id=p.tenant_id AND m.visible AND m.kind='category'))
               AND (NOT @gallery OR EXISTS (SELECT 1 FROM photos WHERE property_id=p.id))
             ORDER BY lower(title), p.id LIMIT 30 OFFSET @offset
             """);
+        command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         command.Parameters.AddWithValue("admin", admin);
         command.Parameters.AddWithValue("all", id is null);
         command.Parameters.AddWithValue("id", id ?? Guid.Empty);
@@ -50,13 +51,14 @@ sealed class PropertyStore(NpgsqlDataSource db)
         return result;
     }
 
-    public async Task<List<string>> ListKinds(bool admin, CancellationToken ct)
+    public async Task<List<string>> ListKinds(bool admin, CancellationToken ct, Guid? tenantId = null)
     {
         await using var command = db.CreateCommand("""
             SELECT min(kind) FROM properties
-            WHERE (@admin OR status='Publicado') AND btrim(kind) <> ''
+            WHERE tenant_id=@tenant AND (@admin OR status='Publicado') AND btrim(kind) <> ''
             GROUP BY lower(kind) ORDER BY lower(kind)
             """);
+        command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         command.Parameters.AddWithValue("admin", admin);
         await using var reader = await command.ExecuteReaderAsync(ct);
         var kinds = new List<string>();
@@ -64,36 +66,38 @@ sealed class PropertyStore(NpgsqlDataSource db)
         return kinds;
     }
 
-    public async Task<int> PublishReadyDrafts(CancellationToken ct)
+    public async Task<int> PublishReadyDrafts(CancellationToken ct, Guid? tenantId = null)
     {
         await using var command = db.CreateCommand("""
             UPDATE properties
                SET status = 'Publicado', version = version + 1
-             WHERE status = 'Rascunho' AND btrim(city) <> '' AND btrim(kind) <> '' AND price > 0
+             WHERE tenant_id=@tenant AND status = 'Rascunho' AND btrim(city) <> '' AND btrim(kind) <> '' AND price > 0
             """);
+        command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         return await command.ExecuteNonQueryAsync(ct);
     }
 
-    public async Task<bool> Save(Guid id, PropertyInput input, bool create, CancellationToken ct)
+    public async Task<bool> Save(Guid id, PropertyInput input, bool create, CancellationToken ct, Guid tenantId)
     {
         await using var connection = await db.OpenConnectionAsync(ct);
-        return await Save(id, input, create, connection, null, ct);
+        return await Save(id, input, create, connection, null, ct, tenantId);
     }
 
     public static async Task<bool> Save(Guid id, PropertyInput input, bool create,
-        NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct)
+        NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct, Guid tenantId)
     {
         await using var command = new NpgsqlCommand(create ? """
-            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone)
-            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''))
+            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone,tenant_id)
+            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''),@tenant)
             """ : """
             UPDATE properties SET code=@code,source=@source,title=@title,kind=@kind,district=@district,
                 city=@city,price=@price,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,
                 zone=CASE WHEN @zone IS NULL THEN zone ELSE NULLIF(@zone,'') END,
                 notes=CASE WHEN @notes IS NULL THEN notes ELSE NULLIF(@notes,'') END,version=version+1
-            WHERE id=@id AND version=@version
+            WHERE id=@id AND tenant_id=@tenant AND version=@version
             """, connection, transaction);
         command.Parameters.AddWithValue("id", id);
+        command.Parameters.AddWithValue("tenant", tenantId);
         command.Parameters.AddWithValue("code", input.Code.Trim());
         command.Parameters.AddWithValue("source", input.Source.Trim());
         command.Parameters.AddWithValue("title", input.Title.Trim());

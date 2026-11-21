@@ -6,14 +6,15 @@ static class SessionEndpoints
 {
     public static void Map(WebApplication app, RouteGroupBuilder admin)
     {
-        app.MapPost("/api/admin/login", async (Login input, HttpContext ctx, StaffStore staff, CancellationToken ct) =>
+        app.MapPost("/api/admin/login", async (Login input, HttpContext ctx, StaffStore staff, TenantContext tenant, CancellationToken ct) =>
         {
-            var user = await staff.Verify(input.Username, input.Password, ct);
+            var user = await staff.Verify(input.Username, input.Password, ct, tenant.Id);
             if (user is null) return Results.Unauthorized();
             var identity = new ClaimsIdentity([
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, user.Role)
+                new Claim(ClaimTypes.Role, user.Role),
+                new Claim("tenant_id", tenant.Id.ToString())
                 ], CookieAuthenticationDefaults.AuthenticationScheme);
             await ctx.SignInAsync(new ClaimsPrincipal(identity));
             return Results.NoContent();

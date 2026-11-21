@@ -5,9 +5,13 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
     public const int MaxBytes = 8 * 1024 * 1024;
     private readonly string root = Path.GetFullPath(configuration["Media:Path"] ?? "./midia");
 
-    private string FilePath(Guid property, Guid photo) => Path.Combine(root, property.ToString("N"), photo.ToString("N"));
+    private string FilePath(Guid property, Guid photo, Guid tenantId)
+    {
+        var directory = tenantId == TenantContext.LegacyId ? root : Path.Combine(root, "tenants", tenantId.ToString("N"));
+        return Path.Combine(directory, property.ToString("N"), photo.ToString("N"));
+    }
 
-    public async Task<int> Add(Guid property, IFormFile file, CancellationToken ct)
+    public async Task<int> Add(Guid property, IFormFile file, CancellationToken ct, Guid tenantId)
     {
         if (file.Length is <= 0 or > MaxBytes) return 413;
         await using var stream = file.OpenReadStream();
@@ -18,7 +22,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         stream.Position = 0;
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
-        if (!await LockProperty(connection, tx, property, ct)) return 404;
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return 404;
         await using var find = new NpgsqlCommand("""
             SELECT n FROM generate_series(0,4) AS n
             WHERE NOT EXISTS (SELECT 1 FROM photos WHERE property_id=@property AND slot=n)
@@ -28,7 +32,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         if (await find.ExecuteScalarAsync(ct) is not int slot) return 409;
 
         var id = Guid.NewGuid();
-        var path = FilePath(property, id);
+        var path = FilePath(property, id, tenantId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var written = false;
         try
@@ -54,45 +58,46 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         }
     }
 
-    public async Task<IResult> Read(Guid property, Guid id, bool admin, CancellationToken ct)
+    public async Task<IResult> Read(Guid property, Guid id, bool admin, CancellationToken ct, Guid tenantId)
     {
         await using var command = db.CreateCommand("""
             SELECT f.content_type FROM photos f JOIN properties p ON p.id=f.property_id
-            WHERE f.property_id=@property AND f.id=@id AND (@admin OR p.status='Publicado')
+            WHERE f.property_id=@property AND f.id=@id AND p.tenant_id=@tenant AND (@admin OR p.status='Publicado')
             """);
         command.Parameters.AddWithValue("property", property);
         command.Parameters.AddWithValue("id", id);
         command.Parameters.AddWithValue("admin", admin);
+        command.Parameters.AddWithValue("tenant", tenantId);
         if (await command.ExecuteScalarAsync(ct) is not string type) return Results.NotFound();
         try
         {
-            var stream = new FileStream(FilePath(property, id), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            var stream = new FileStream(FilePath(property, id, tenantId), FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             return Results.File(stream, type, enableRangeProcessing: true);
         }
         catch (FileNotFoundException) { return Results.NotFound(); }
         catch (DirectoryNotFoundException) { return Results.NotFound(); }
     }
 
-    public async Task<bool> Remove(Guid property, Guid id, CancellationToken ct)
+    public async Task<bool> Remove(Guid property, Guid id, CancellationToken ct, Guid tenantId)
     {
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
-        if (!await LockProperty(connection, tx, property, ct)) return false;
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return false;
         await using var command = new NpgsqlCommand(
             "DELETE FROM photos WHERE property_id=@property AND id=@id", connection, tx);
         command.Parameters.AddWithValue("property", property);
         command.Parameters.AddWithValue("id", id);
         if (await command.ExecuteNonQueryAsync(ct) == 0) return false;
         await tx.CommitAsync(CancellationToken.None);
-        File.Delete(FilePath(property, id));
+        File.Delete(FilePath(property, id, tenantId));
         return true;
     }
 
-    public async Task<bool> SetCover(Guid property, Guid id, CancellationToken ct)
+    public async Task<bool> SetCover(Guid property, Guid id, CancellationToken ct, Guid tenantId)
     {
         await using var connection = await db.OpenConnectionAsync(ct);
         await using var tx = await connection.BeginTransactionAsync(ct);
-        if (!await LockProperty(connection, tx, property, ct)) return false;
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return false;
         await using var command = new NpgsqlCommand("""
             WITH chosen AS (SELECT slot FROM photos WHERE property_id=@property AND id=@id),
                  first AS (SELECT min(slot) AS slot FROM photos WHERE property_id=@property)
@@ -107,10 +112,11 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         return true;
     }
 
-    private static async Task<bool> LockProperty(NpgsqlConnection connection, NpgsqlTransaction tx, Guid property, CancellationToken ct)
+    private static async Task<bool> LockProperty(NpgsqlConnection connection, NpgsqlTransaction tx, Guid property, CancellationToken ct, Guid tenantId)
     {
-        await using var command = new NpgsqlCommand("SELECT 1 FROM properties WHERE id=@id FOR UPDATE", connection, tx);
+        await using var command = new NpgsqlCommand("SELECT 1 FROM properties WHERE id=@id AND tenant_id=@tenant FOR UPDATE", connection, tx);
         command.Parameters.AddWithValue("id", property);
+        command.Parameters.AddWithValue("tenant", tenantId);
         return await command.ExecuteScalarAsync(ct) is not null;
     }
 

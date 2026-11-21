@@ -5,11 +5,11 @@ import {request} from './api.js';
 export function mountGallery(home) {
   const section = document.querySelector('#gallery');
   const path = root + '/' + home.id;
-  section.innerHTML = '<h3>Fotos do imóvel <span class="chips">' + home.photos.length + ' de 5</span></h3><div class="thumb-grid">' +
+  section.innerHTML = '<h3>Galeria do imóvel <span class="chips">' + home.photos.length + ' de 5</span></h3><div class="thumb-grid">' +
     home.photos.map((photo,i) => '<article class="thumb-card">' + picture(home,photo) + '<div class="row">' +
       (i === 0 ? '<span>Capa</span>' : '<button class="alt" data-cover="' + escape(photo) + '">Usar como capa</button>') +
       '<button class="alt" data-remove="' + escape(photo) + '">Remover</button></div></article>').join('') +
-    '</div>' + (home.photos.length < 5 ? '<div class="row"><label>Enviar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp"></label>' +
+    '</div><p class="muted">A primeira imagem é a capa do anúncio. Escolha outra capa ou remova fotos sem sair do cadastro.</p>' + (home.photos.length < 5 ? '<div class="row"><label>Enviar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp"></label>' +
       '<label>Tirar foto<input type="file" accept="image/*" capture="environment"></label></div>' : '');
   let busy = false;
   const update = async action => {
