@@ -16,7 +16,7 @@ export async function excel(file){
  return [...sheet.getElementsByTagName('row')].map(r=>{const row=[];for(const c of r.getElementsByTagName('c')){const col=(c.getAttribute('r')||'A').match(/^[A-Z]+/)[0];let i=0;for(const x of col)i=i*26+x.charCodeAt(0)-64;const v=c.getElementsByTagName('v')[0]?.textContent??'';row[i-1]=c.getAttribute('t')==='s'?shared[+v]??'':c.getAttribute('t')==='inlineStr'?[...c.getElementsByTagName('t')].map(t=>t.textContent).join(''):v}return row}).filter(r=>r.some(Boolean));
 }
 
-export function structuredRows(text, extension) {
+export function structuredRows(text, extension, skipped = () => {}) {
   let records;
   if (extension === 'json') {
     const document = JSON.parse(text.replace(/^\uFEFF/, ''));
@@ -24,8 +24,11 @@ export function structuredRows(text, extension) {
   } else {
     if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw Error('Declarações de entidades XML não são aceitas.');
     const document = new DOMParser().parseFromString(text, 'application/xml');
-    if (document.querySelector('parsererror') || document.documentElement.localName !== 'imoveis')
-      throw Error('Use um XML com a estrutura imoveis/imovel.');
+    if (document.querySelector('parsererror')) throw Error('XML inválido.');
+    if (document.documentElement.localName === 'ListingDataFeed' || extension === 'vrsync')
+      return vrSyncRows(document.documentElement, skipped);
+    if (document.documentElement.localName !== 'imoveis')
+      throw Error('Use um arquivo XML do catálogo ou um feed VRSync.');
     records = [...document.documentElement.children].filter(node => node.localName === 'imovel')
       .map(node => Object.fromEntries([...node.children].filter(field => !field.children.length)
         .map(field => [field.localName, field.textContent])));
@@ -47,4 +50,36 @@ export function structuredRows(text, extension) {
     const value = Object.hasOwn(record, key) ? record[key] : null;
     return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
   }))];
+}
+
+function vrSyncRows(root, skipped) {
+  const namespace = 'http://www.vivareal.com/schemas/1.0/VRSync';
+  if (root.localName !== 'ListingDataFeed' || root.namespaceURI !== namespace)
+    throw Error('Use um feed VRSync com namespace oficial.');
+  const children = (node, name) => [...(node?.children ?? [])]
+    .filter(child => child.namespaceURI === namespace && child.localName === name);
+  const child = (node, name) => children(node, name)[0];
+  const value = (node, name) => child(node, name)?.textContent.trim() ?? '';
+  const listings = children(child(root, 'Listings'), 'Listing');
+  if (!listings.length || listings.length > 5000) throw Error('Use um feed com até 5.000 anúncios.');
+  const types = {
+    'Residential / Apartment':'Apartamento', 'Residential / Home':'Casa', 'Residential / Condo':'Casa em condomínio',
+    'Residential / Land Lot':'Terreno', 'Commercial / Business':'Comercial'
+  };
+  const rows = [];
+  for (const listing of listings) {
+    const details = child(listing, 'Details');
+    const location = child(listing, 'Location');
+    const price = child(details, 'ListPrice');
+    if (!['Sale','Sale/Rent'].includes(value(listing, 'TransactionType')) || price?.getAttribute('currency') !== 'BRL') continue;
+    const type = value(details, 'PropertyType');
+    rows.push([
+      value(listing, 'ListingID'), value(listing, 'Title'), Object.hasOwn(types,type) ? types[type] : type,
+      value(location, 'Neighborhood'), value(location, 'City'), price.textContent.trim(),
+      value(details, 'Bedrooms'), value(details, 'LivingArea') || value(details, 'LotArea')
+    ]);
+  }
+  if (!rows.length) throw Error('O feed não contém anúncios de venda com preço em reais.');
+  skipped(listings.length - rows.length);
+  return [['Código','Título','Tipo','Bairro','Cidade','Preço','Dormitórios','Área'], ...rows];
 }

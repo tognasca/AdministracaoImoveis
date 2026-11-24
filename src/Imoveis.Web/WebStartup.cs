@@ -57,6 +57,7 @@ static class WebStartup
             };
         });
         builder.Services.AddAuthorization();
+        CatalogApi.Configure(builder.Services);
         builder.Services.AddCors(options => options.AddPolicy("PublicCatalog", policy =>
             policy.AllowAnyOrigin().WithMethods(HttpMethods.Get)));
         if (Directory.Exists("/keys")) builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/keys"));

@@ -46,9 +46,9 @@ O modo Development permite a autenticação por HTTP no endereço local. A porta
 
 ## Importação e usuários
 
-No painel, clique em **Importar arquivo** ou acesse http://localhost:5086/admin/importacoes. Após entrar, escolha XLSX, CSV, TXT, JSON ou XML. O JSON aceita uma lista de objetos ou a chave `properties` da exportação. O XML aceita a estrutura `imoveis/imovel` da exportação. Ambos entram na revisão de mapeamento. Selecione a origem, revise o mapeamento e confirme o lote. Clique em **Salvar mapeamento agora** para gravar a configuração, ou marque a opção de salvar antes de revisar. A lista **Mapeamentos salvos** consulta o banco ao abrir Importações. Ao confirmar um lote, o arquivo original fica no PostgreSQL e pode ser baixado no histórico. A primeira aba do XLSX é usada e a primeira linha contém os cabeçalhos. Arquivos delimitados devem ser UTF-8. Uma coluna vazia preserva o conteúdo do cadastro existente. Novos imóveis entram como rascunho. O sistema preserva a identidade, o álbum, as fotos e o estado de publicação dos imóveis atualizados.
+No painel, clique em **Importar arquivo** ou acesse http://localhost:5086/admin/importacoes. Após entrar, escolha XLSX, CSV, TXT, JSON ou XML. O JSON aceita uma lista de objetos ou a chave `properties` da exportação. O XML aceita a estrutura `imoveis/imovel` da exportação. Os arquivos entram na revisão de mapeamento. O feed VRSync pode usar extensão XML ou VRSYNC e importa anúncios de venda com preço em reais. A revisão informa quantos anúncios de outras modalidades foram ignorados. Selecione a origem, revise o mapeamento e confirme o lote. Clique em **Salvar mapeamento agora** para gravar a configuração, ou marque a opção de salvar antes de revisar. A lista **Mapeamentos salvos** consulta o banco ao abrir Importações. Ao confirmar um lote, o arquivo original fica no PostgreSQL e pode ser baixado no histórico. A primeira aba do XLSX é usada e a primeira linha contém os cabeçalhos. Arquivos delimitados devem ser UTF-8. Uma coluna vazia preserva o conteúdo do cadastro existente. Novos imóveis entram como rascunho. O sistema preserva a identidade, o álbum, as fotos e o estado de publicação dos imóveis atualizados.
 
-Em **Importar imóveis → Exportar catálogo**, baixe até 5.000 imóveis da imobiliária atual em JSON, CSV, XML ou Excel. O Excel mantém códigos como texto e inclui os dados do catálogo.
+Em **Importar imóveis → Exportar catálogo**, baixe até 5.000 imóveis da imobiliária atual em JSON, CSV, XML ou Excel. O Excel mantém códigos como texto e inclui os dados do catálogo. Use **Imprimir ou salvar PDF** para abrir a versão de impressão e selecione **Salvar como PDF** no navegador.
 
 O administrador cadastra operadores na tela **Usuários**. Operadores gerenciam imóveis e importações. Apenas administradores gerenciam contas.
 
@@ -89,3 +89,15 @@ No tratamento de PDF, a cidade ausente recebe **São Paulo** como padrão editá
 O campo **Zona** possui lista com Centro, Zona Norte, Zona Sul, Zona Leste e Zona Oeste, além de Não informada. Está disponível no cadastro e na grade do PDF, é salvo no imóvel e aparece nas características do anúncio. Importações reconhecem a coluna Zona/Região; no tabelão Kallas e Kazzas, os títulos de zona são aplicados às opções da seção. A zona pode ser corrigida na grade antes da importação.
 
 Em **Tratar PDF → Exportar para Excel**, baixe a revisão em `.xlsx` com as abas Imóveis, Informações e Instruções. A aba Imóveis contém todos os candidatos e sua seleção; permite corrigir campos, excluir/reordenar linhas e usar as listas de Zona e Incluir. Cabeçalhos e códigos devem ser mantidos. A referência à página e ao texto original acompanha cada linha. **Carregar Excel corrigido** substitui a grade pela planilha, recalcula pendências e mantém a conferência obrigatória antes de gravar. Também é possível retomar uma revisão diretamente pelo Excel na tela inicial de Tratar PDF. Na mesma sessão, o histórico mantém o PDF original; ao retomar apenas pelo Excel, guarda a planilha corrigida. O limite é de 1.000 imóveis e 8 MB para o arquivo carregado. Os trechos da aba Informações são apenas para consulta. Teste o intercâmbio com `node scripts/verificar-pdf-excel.mjs`.
+
+## API autenticada de catálogo
+
+O catálogo v1 atende ao domínio verificado da imobiliária. Abra `/docs/catalogo` nesse domínio para consultar o Swagger e testar as rotas.
+
+Com a sessão de administrador do painel, use `POST /api/admin/integracoes/catalogo/chave` com o cabeçalho `X-Imoveis-Action: 1`. A resposta contém o token em texto e o banco guarda somente o hash. Repetir o POST substitui a chave imediatamente. Use `DELETE` na mesma rota para revogá-la.
+
+O backend da hospedagem do cliente envia `Authorization: Bearer <token>` por HTTPS ao domínio da imobiliária. Guarde a chave nas variáveis de ambiente do backend. Para hospedagem exclusivamente estática, use o pacote existente da vitrine e o catálogo público.
+
+- `GET /api/v1/catalogo/imoveis` retorna até 30 imóveis publicados por página. Parâmetros disponíveis: `page`, `q`, `kind`, `maxPrice` e `bedrooms`.
+- `GET /api/v1/catalogo/imoveis/{id}` retorna o anúncio publicado. Campo `photos` contém as rotas de fotos que o mesmo backend pode consultar com a chave.
+- A chave tem permissão de leitura. A cota compartilhada entre as instâncias é de 120 solicitações por minuto, por imobiliária. A API retorna `429` e `Retry-After` quando a cota acaba.

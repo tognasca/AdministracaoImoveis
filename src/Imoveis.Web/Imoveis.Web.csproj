@@ -8,5 +8,6 @@
     <PackageReference Include="Npgsql" Version="10.0.0" />
     <EmbeddedResource Include="Database/*.sql" />
     <EmbeddedResource Include="StaticStorefront/*" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 </Project>

@@ -17,6 +17,7 @@ async function call(tenant, path, status, method = 'GET', body, contentType = 'a
   const headers = {Host:tenant.host, 'X-Imoveis-Action':'1'};
   if (tenant.origin) headers.Origin = tenant.origin;
   if (tenant.platformKey) headers['X-Saas-Platform-Key'] = tenant.platformKey;
+  if (tenant.token) headers.Authorization = 'Bearer '+tenant.token;
   if (tenant.cookie) headers.Cookie = tenant.cookie;
   if (data) {
     headers['Content-Type'] = contentType;
@@ -33,7 +34,10 @@ async function call(tenant, path, status, method = 'GET', body, contentType = 'a
     req.on('error',reject);
     req.end(data);
   });
-  assert.equal(response.status,status,tenant.host+' '+method+' '+path+' '+response.body.toString());
+  const message = tenant.host+' '+method+' '+path+' '+response.body.toString();
+  if (Array.isArray(status)) assert(status.includes(response.status),message);
+  else assert.equal(response.status,status,message);
+  if (response.status === 429) return response;
   if (tenant.origin) {
     assert.equal(response.headers['access-control-allow-origin'], path.startsWith('/api/catalogo/') ? '*' : undefined);
     assert.equal(response.headers['access-control-allow-credentials'], undefined);
@@ -81,6 +85,44 @@ await call(first,'/media/'+firstId+'/'+photo,200);
 await call(second,'/media/'+firstId+'/'+photo,404);
 await call(second,property+'/'+firstId+'/fotos/'+photo,404,'DELETE');
 await call(second,property+'/'+firstId+'/fotos/'+photo+'/capa',404,'PUT');
+
+const keyPath = admin+'/integracoes/catalogo/chave';
+const catalogApi = '/api/v1/catalogo/imoveis';
+const {token: firstToken} = await call(first,keyPath,200,'POST');
+const {token: secondToken} = await call(second,keyPath,200,'POST');
+const firstReader = {...company(first.host),token:firstToken};
+const secondReader = {...company(second.host),token:secondToken};
+await call(first,catalogApi,401);
+await call({...secondReader,token:firstToken},catalogApi,401);
+const catalogPage = await call(firstReader,catalogApi+'?q=Casa&kind=Casa&page=1',200);
+assert.equal(catalogPage.page,1);
+assert.equal(catalogPage.pageSize,30);
+assert(catalogPage.properties.some(item => item.id === firstId));
+assert(!catalogPage.properties.some(item => item.id === secondId));
+const item = await call(firstReader,catalogApi+'/'+firstId,200);
+assert(!Object.hasOwn(item,'notes'));
+assert.deepEqual(await call(firstReader,item.photos[0],200),png);
+await call(secondReader,item.photos[0],404);
+await call(secondReader,catalogApi+'/'+firstId,404);
+const {id: catalogDraftId} = await call(first,property,201,'POST',{...input,code:'RASCUNHO-API',status:'Rascunho'});
+await call(firstReader,catalogApi+'/'+catalogDraftId,404);
+const spec = await call(first,'/docs/catalogo/catalogo-v1.json',200);
+assert(spec.paths[catalogApi]);
+assert.equal(spec.components.securitySchemes.CatalogBearer.scheme,'bearer');
+assert(!spec.paths[keyPath]);
+await call(first,keyPath,204,'DELETE');
+await call(firstReader,catalogApi,401);
+const {token: renewed} = await call(first,keyPath,200,'POST');
+let limited;
+for (let batch = 0; batch < 13 && !limited; batch++) {
+  const responses = await Promise.all(Array.from({length:20}, () =>
+    call({...firstReader,token:renewed},catalogApi+'?q=sem-resultado', [200,429])));
+  limited = responses.find(response => response.status === 429);
+}
+assert(Number(limited?.headers['retry-after']) > 0);
+await call(secondReader,catalogApi,200);
+await call(first,keyPath,204,'DELETE');
+console.log('API autenticada: Swagger, chave por imobiliária, revogação, filtros e proteção de rascunhos e fotos.');
 
 const firstAdmin = (await call(first,staff,200)).find(user => user.username === 'admin');
 assert(!(await call(second,staff,200)).some(user => user.id === firstAdmin.id));

@@ -88,7 +88,7 @@ export function prepare(rows,mapping,existing,source) {
 }
 export function mountImport(ui) {
   const {app,request,escape,notice,report,adminNav,bindLogout,isCurrent} = ui;
-  let originalFile = null;
+  let originalFile = null, skippedListings = 0;
   let rows = [], fileName = '', mapping = [], source = '', signature = '', models = [], lookupText = '';
   const start = stage => {
     app.innerHTML = adminNav()+'<h2>Importar imóveis</h2><p class="muted">'+stage+' de 3 · Arquivo → Mapeamento → Conferência</p>'+notice;
@@ -97,13 +97,14 @@ export function mountImport(ui) {
   const choose = () => {
     originalFile = null;
     start(1);
-    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON ou XML. No Excel, será usada a primeira aba.</p>'+
-      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml"></label>'+
+    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON, XML ou VRSync. No Excel, será usada a primeira aba.</p>'+
+      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml,.vrsync"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
     const exports = '/api/admin/exportacoes/imoveis?limit=5000&format=';
     app.insertAdjacentHTML('beforeend','<section class="box"><h3>Exportar catálogo</h3>'+
       '<p>Até 5.000 imóveis por arquivo.</p><div class="row">'+
       ['json','csv','xml'].map(format => '<a download="imoveis.'+format+'" href="'+exports+format+'">'+format.toUpperCase()+'</a>').join('')+
+      '<a target="_blank" rel="noopener" href="'+exports+'impressao">Imprimir ou salvar PDF</a>'+
       '<button type="button" class="alt" id="catalog-xlsx">Baixar Excel</button></div></section>');
     const excelButton = app.querySelector('#catalog-xlsx');
     excelButton.onclick = async () => {
@@ -140,10 +141,13 @@ export function mountImport(ui) {
         event.target.disabled = true;
         if (file.size > 8e6) throw Error('Selecione um arquivo de até 8 MB.');
         const extension = file.name.split('.').at(-1).toLowerCase();
+        skippedListings = 0;
         if (extension === 'xlsx') rows = await excel(file);
         else {
           const text = await file.text();
-          rows = extension === 'json' || extension === 'xml' ? structuredRows(text, extension) : delimited(text);
+          rows = ['json','xml','vrsync'].includes(extension)
+            ? structuredRows(text, extension, count => { skippedListings = count; })
+            : delimited(text);
         }
         if (rows.length < 2 || rows[0].length < 1) throw Error('Inclua o cabeçalho e ao menos uma linha de dados.');
         if (rows.length > 5001 || rows[0].length > 100) throw Error('Use até 5.000 registros e 100 colunas por arquivo.');
@@ -170,6 +174,7 @@ export function mountImport(ui) {
   const map = () => {
     start(2);
     const options = Object.entries(labels);
+    if (skippedListings) report(skippedListings+' anúncios fora do formato de venda em reais foram ignorados.');
     app.insertAdjacentHTML('beforeend','<form id="mapping"><div class="box"><h3>'+escape(fileName)+'</h3>'+
       '<label>Origem dos códigos<input required maxlength="100" name="source" value="'+escape(source)+'"></label>'+
       (models.length ? '<p></p><label>Modelo salvo<select id="models"><option value="">Selecionar modelo</option>'+

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Xml.Linq;
 using Npgsql;
@@ -14,7 +15,7 @@ static class ExportEndpoints
     public static void Map(RouteGroupBuilder admin)
     {
         admin.MapGet("/exportacoes/imoveis", Export);
-        admin.MapGet("/exportacoes/formatos", () => Results.Ok(new[] { "json", "csv", "xml" }));
+        admin.MapGet("/exportacoes/formatos", () => Results.Ok(new[] { "json", "csv", "xml", "impressao" }));
     }
 
     // Prevent spreadsheet formula execution when users open CSV files.
@@ -28,8 +29,8 @@ static class ExportEndpoints
         string? format, DateTimeOffset? since, int? limit, CancellationToken ct)
     {
         var type = (format ?? "json").Trim().ToLowerInvariant();
-        if (type is not ("json" or "csv" or "xml"))
-            return Results.BadRequest("Formato disponível: json, csv ou xml.");
+        if (type is not ("json" or "csv" or "xml" or "impressao"))
+            return Results.BadRequest("Formato disponível: json, csv, xml ou impressao.");
         if (limit is < 1 or > 5000)
             return Results.BadRequest("O limite deve estar entre 1 e 5000.");
         var max = limit ?? 500;
@@ -66,6 +67,8 @@ static class ExportEndpoints
                     reader.IsDBNull(12) ? null : reader.GetString(12),reader.GetDateTime(13),links));
             }
         }
+        if (type == "impressao") return PrintCatalog(items, max);
+
         var stamp = DateTimeOffset.UtcNow;
         if (type == "json") return Results.Ok(new { exportedAt = stamp, count = items.Count,
             nextSince = items.Count == max ? items[^1].ModifiedAt : (DateTime?)null, properties = items });
@@ -98,5 +101,38 @@ static class ExportEndpoints
                 new XElement("fotos",p.Photos.Select(photo => new XElement("foto",
                     new XAttribute("ordem",photo.Slot),photo.Url)))))));
         return Results.File(Encoding.UTF8.GetBytes(xml.ToString()),"application/xml","imoveis.xml");
+    }
+
+    private static IResult PrintCatalog(List<ExportProperty> items, int limit)
+    {
+        var culture = CultureInfo.GetCultureInfo("pt-BR");
+        var html = new StringBuilder("""
+            <!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+            <title>Catálogo de imóveis</title>
+            <style>
+            body{font:14px system-ui,sans-serif;color:#171717;margin:24px}
+            table{width:100%;border-collapse:collapse}
+            th,td{padding:8px;border-bottom:1px solid #bbb;text-align:left;overflow-wrap:anywhere}
+            th:last-child,td:last-child{text-align:right}
+            tr{break-inside:avoid}
+            button{font:inherit;padding:8px 12px;cursor:pointer}
+            @media print{button,.screen-only{display:none}body{margin:0}thead{display:table-header-group}}
+            </style><main><h1>Catálogo de imóveis</h1>
+            <button type="button" onclick="window.print()">Imprimir ou salvar como PDF</button>
+            <p class="screen-only">Selecione Salvar como PDF na janela de impressão.</p>
+            """);
+        html.Append("<p>Imóveis neste relatório: ").Append(items.Count).Append("</p>");
+        if (items.Count == limit)
+            html.Append("<p>O relatório atingiu o limite de registros da exportação.</p>");
+        html.Append("<table><thead><tr><th>Código</th><th>Imóvel</th><th>Cidade</th><th>Status</th><th>Preço</th></tr></thead><tbody>");
+        foreach (var item in items)
+        {
+            html.Append("<tr>");
+            foreach (var field in new[] { item.Code, item.Title, item.City, item.Status, item.Price.ToString("C", culture) })
+                html.Append("<td>").Append(HtmlEncoder.Default.Encode(field)).Append("</td>");
+            html.Append("</tr>");
+        }
+        html.Append("</tbody></table></main></html>");
+        return Results.Content(html.ToString(), "text/html; charset=utf-8");
     }
 }
