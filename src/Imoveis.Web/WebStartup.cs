@@ -58,8 +58,12 @@ static class WebStartup
         });
         builder.Services.AddAuthorization();
         CatalogApi.Configure(builder.Services);
-        builder.Services.AddCors(options => options.AddPolicy("PublicCatalog", policy =>
-            policy.AllowAnyOrigin().WithMethods(HttpMethods.Get)));
+        builder.Services.AddCors(options =>
+        {
+            options.AddPolicy("PublicCatalog", policy => policy.AllowAnyOrigin().WithMethods(HttpMethods.Get));
+            options.AddPolicy("PublicInterest", policy => policy.AllowAnyOrigin().WithMethods(HttpMethods.Post)
+                .WithHeaders("Content-Type"));
+        });
         if (Directory.Exists("/keys")) builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/keys"));
         builder.Services.AddRateLimiter(options =>
         {
@@ -67,6 +71,9 @@ static class WebStartup
             options.AddPolicy("login", context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "local",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 8, Window = TimeSpan.FromMinutes(2) }));
+            options.AddPolicy("interest", context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "local",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
         });
         return password;
     }

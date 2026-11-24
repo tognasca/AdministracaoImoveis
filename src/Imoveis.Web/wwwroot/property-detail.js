@@ -1,6 +1,6 @@
 import {app, escape, money} from './ui.js';
 
-import {catalogPhoto, storefrontHref} from './public-catalog.js';
+import {catalogPhoto, catalogRequest, storefrontHref} from './public-catalog.js';
 
 function gallery(home) {
   const total = home.photos.length;
@@ -71,13 +71,18 @@ export function propertyDetail(home, settings, locationText) {
   ].filter(([, value]) => value);
   const whatsapp = /^[0-9]{10,15}$/.test(settings.whatsapp) ? settings.whatsapp : '';
   const email = settings.email || '';
-  const contact = whatsapp || email ? '<form class="property-contact-form" id="property-contact-form">' +
-    '<h2>Fale sobre este imóvel</h2><label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
-    '<label>Sua mensagem<textarea name="message" rows="3" maxlength="800" required>Olá, gostaria de mais informações sobre este imóvel.</textarea></label>' +
-    '<div class="estate-contact">' +
-    (whatsapp ? '<button type="submit" value="whatsapp" class="btn">Continuar no WhatsApp</button>' : '') +
-    (email ? '<button type="submit" value="email" class="btn alt">Abrir e-mail</button>' : '') +
-    '</div><p class="property-contact-hint">Revise e envie a mensagem no aplicativo escolhido.</p></form>' : '';
+  const contact = '<form class="property-contact-form" id="property-contact-form">' +
+    '<h2>Tenho interesse</h2><label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
+    '<label>Telefone ou WhatsApp<input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>' +
+    '<label>E-mail<input name="email" type="email" autocomplete="email" maxlength="254"></label>' +
+    '<p class="property-contact-hint">Informe pelo menos um canal de retorno. A imobiliária usará seus dados para responder sobre este imóvel.</p>' +
+    '<label>Sua mensagem (opcional)<textarea name="message" rows="3" maxlength="800" placeholder="Quero saber mais sobre este imóvel."></textarea></label>' +
+    '<button type="submit" class="btn">Enviar interesse</button>' +
+    '<p class="property-contact-hint" id="property-contact-status" role="status"></p>' +
+    (whatsapp || email ? '<div class="estate-contact">' +
+      (whatsapp ? '<button type="button" value="whatsapp" class="btn alt" data-contact-channel>Continuar no WhatsApp</button>' : '') +
+      (email ? '<button type="button" value="email" class="btn alt" data-contact-channel>Abrir e-mail</button>' : '') +
+      '</div>' : '')+'</form>';
   const album = d.album && /^https?:\/\//i.test(d.album) ? '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="' +
     escape(d.album) + '">Ver álbum externo <span aria-hidden="true">↗</span></a>' : '';
   app.innerHTML = '<div class="property-page"><a class="estate-back" href="' + storefrontHref('vitrine') + '">← Voltar aos imóveis</a>' +
@@ -94,8 +99,8 @@ export function propertyDetail(home, settings, locationText) {
     contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside>' +
     (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
-    '</div></div>' + (contact ? '<div class="property-mobile-contact"><strong>'+money(d.price)+'</strong>'+
-      '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Enviar interesse</a></div>' : '');
+    '</div></div><div class="property-mobile-contact"><strong>'+money(d.price)+'</strong>'+
+    '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Tenho interesse</a></div>';
   bindGallery(home);
   const favorite = app.querySelector('#property-favorite');
   const key = 'estate-favorite:'+home.id;
@@ -121,7 +126,6 @@ export function propertyDetail(home, settings, locationText) {
       if (error.name !== 'AbortError') status.textContent = 'Copie o endereço da página para compartilhar.';
     }
   };
-  if (!contact) return;
   const form = app.querySelector('#property-contact-form');
   app.querySelector('#property-contact-shortcut').onclick = event => {
     event.preventDefault();
@@ -129,22 +133,45 @@ export function propertyDetail(home, settings, locationText) {
     form.elements.contactName.focus({preventScroll:true});
   };
   form.oninput = event => event.target.setCustomValidity('');
-  form.onsubmit = event => {
+  const contactStatus = form.querySelector('#property-contact-status');
+  const submit = form.querySelector('button[type=submit]');
+  let submissionId;
+  form.onsubmit = async event => {
     event.preventDefault();
-    const {contactName, message} = form.elements;
-    const empty = [contactName, message].find(field => !field.value.trim());
-    if (empty) {
-      empty.setCustomValidity('Preencha este campo.');
-      empty.reportValidity();
+    if (submit.disabled) return;
+    const {contactName,phone,email:contactEmail,message} = form.elements;
+    if (!phone.value.trim() && !contactEmail.value.trim()) {
+      phone.setCustomValidity('Informe seu telefone ou e-mail.');
+      phone.reportValidity();
       return;
     }
-    const subject = 'Contato sobre ' + d.title + ' (ref. ' + d.code + ')';
-    const text = 'Imóvel: ' + d.title + ' (ref. ' + d.code + ')\nNome: ' + contactName.value.trim() + '\n\n' + message.value.trim();
-    if ((event.submitter?.value === 'email' || !whatsapp) && email) {
-      const recipient = encodeURIComponent(email).replace('%40', '@');
-      location.href = 'mailto:' + recipient + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
-    } else {
-      location.href = 'https://wa.me/' + whatsapp + '?text=' + encodeURIComponent(text);
+    submit.disabled = true;
+    contactStatus.textContent = 'Enviando…';
+    try {
+      submissionId ??= crypto.randomUUID();
+      await catalogRequest('/api/imoveis/'+encodeURIComponent(home.id)+'/interesse','POST',{
+        submissionId,name:contactName.value,email:contactEmail.value,phone:phone.value,message:message.value
+      });
+      form.reset();
+      submit.textContent = 'Interesse enviado';
+      contactStatus.textContent = 'A imobiliária recebeu seu contato.';
+    } catch (error) {
+      contactStatus.textContent = error.message;
+      submit.disabled = false;
     }
   };
+  form.addEventListener('input', () => form.elements.phone.setCustomValidity(''));
+  for (const button of form.querySelectorAll('[data-contact-channel]')) {
+    button.onclick = () => {
+      const {contactName,message} = form.elements;
+      const subject = 'Contato sobre ' + d.title + ' (ref. ' + d.code + ')';
+      const text = 'Imóvel: ' + d.title + ' (ref. ' + d.code + ')' +
+        (contactName.value.trim() ? '\nNome: ' + contactName.value.trim() : '') +
+        '\n\n' + (message.value.trim() || 'Olá, gostaria de mais informações sobre este imóvel.');
+      if (button.value === 'email') {
+        const recipient = encodeURIComponent(email).replace('%40', '@');
+        location.href = 'mailto:' + recipient + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
+      } else location.href = 'https://wa.me/' + whatsapp + '?text=' + encodeURIComponent(text);
+    };
+  }
 }

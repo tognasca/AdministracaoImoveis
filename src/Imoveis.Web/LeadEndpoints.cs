@@ -101,7 +101,7 @@ static class LeadEndpoints
             var events = new List<LeadStageEvent>();
             do
             {
-                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.GetString(1), reader.GetDateTime(2)));
+                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.IsDBNull(1) ? "Vitrine" : reader.GetString(1), reader.GetDateTime(2)));
             } while (await reader.ReadAsync(ct));
             return Results.Ok(events);
         });

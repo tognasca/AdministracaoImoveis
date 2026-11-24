@@ -7,14 +7,20 @@ export function useExternalCatalog(url) {
   catalogUrl = new URL(url);
 }
 
-export async function catalogRequest(path) {
-  if (!catalogUrl) return request(path);
-  const response = await fetch(catalogUrl.href + path.slice('/api'.length), {credentials:'omit'});
+export async function catalogRequest(path, method = 'GET', body) {
+  if (!catalogUrl) return request(path,method,body);
+  const response = await fetch(catalogUrl.href + path.slice('/api'.length), {
+    credentials:'omit',method,
+    ...(body ? {headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {})
+  });
   if (!response.ok) {
-    const message = response.status === 404 ? 'Catálogo ou imóvel indisponível.' : 'Não foi possível carregar a vitrine.';
-    throw new Error(message);
+    const detail = response.status === 400 ? await response.json().catch(() => null) : null;
+    const message = typeof detail === 'string' ? detail :
+      response.status === 404 ? 'Catálogo ou imóvel indisponível.' :
+      response.status === 429 ? 'Aguarde um minuto e tente novamente.' : 'Não foi possível concluir a operação.';
+    throw Object.assign(new Error(message),{status:response.status});
   }
-  return response.json();
+  return response.status === 204 ? undefined : response.json();
 }
 
 export function catalogMedia(path) {

@@ -67,6 +67,12 @@ static class PublicEndpoints
             if (result.Count == 0) return Results.NotFound();
             return external ? Results.Ok(PublicProperty(result[0])) : Results.Ok(result[0]);
         });
+        var interest = group.MapPost(api + "/imoveis/{id:guid}/interesse",
+            (Guid id, PublicLeadEndpoints.InterestInput input, HttpContext http, TenantContext tenant, NpgsqlDataSource db,
+                CancellationToken ct) => PublicLeadEndpoints.Register(id,CatalogTenant(http,tenant),input,db,ct))
+            .RequireRateLimiting("interest")
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(8_192));
+        if (external) interest.RequireCors("PublicInterest");
         group.MapGet("/media/vitrine/hero", (HttpContext http, NpgsqlDataSource db, MediaStore media, StorefrontImages images,
             TenantContext tenant, CancellationToken ct) => ModelHeroes.Read(db,media,images,CatalogTenant(http,tenant),null,false,ct));
         group.MapGet("/media/vitrine/banner", (HttpContext http, StorefrontImages images, TenantContext tenant, CancellationToken ct) =>
