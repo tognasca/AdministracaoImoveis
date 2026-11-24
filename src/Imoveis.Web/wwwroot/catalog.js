@@ -16,23 +16,26 @@ export async function adminListing(params, isCurrent) {
     ['Leads recebidos',summary.leads], ['Etapa de visita',summary.visits], ['Propostas',summary.proposals],
     ['Conversão de leads',summary.leads ? new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(summary.won/summary.leads) : '—']
   ] : [];
+  const metricGroup = (label,items) => '<section class="dashboard-metric-group"><h3>'+label+'</h3><div class="premium-stats">'+
+    items.map(([title,value]) => '<div class="premium-stat"><span>'+title+'</span><strong>'+
+      (typeof value === 'number' ? value.toLocaleString('pt-BR') : value)+'</strong></div>').join('')+'</div></section>';
   app.innerHTML = adminNav() + '<div class="premium-heading"><div><h2>Gestão de imóveis</h2></div><div class="premium-actions">' +
     link('Novo imóvel', 'editar') + link('Importar arquivos', '/admin/importacoes', true) +
-    '</div></div><section class="premium-stats" aria-label="Resumo da imobiliária">' +
-    (summary ? metrics.map(([label,value]) => '<div class="premium-stat"><span>' + label + '</span><strong>' +
-       (typeof value === 'number' ? value.toLocaleString('pt-BR') : value) + '</strong></div>').join('') :
-      '<p role="status">O resumo da imobiliária está indisponível.</p>') + '</section>' +
+    '</div></div>' +
+    (summary ? '<div class="dashboard-overview" aria-label="Resumo da imobiliária">'+
+      metricGroup('Carteira de imóveis',metrics.slice(0,4))+metricGroup('Atendimento comercial',metrics.slice(4))+'</div>' :
+      '<p role="status">O resumo da imobiliária está indisponível.</p>') +
     notice + (getSession()?.administrator ? '<div class="row"><button class="alt" id="publish-drafts">Publicar rascunhos completos</button>' +
       '<span class="muted">Rascunhos com cidade, tipo e preço podem ir para a vitrine.</span></div>' : '') + '<form class="box filter-bar" id="search"><label>Cidade, bairro, título ou código<input name="q" maxlength="120" value="' +
     escape(q) + '"></label>' +
     '<button>Buscar</button></form><div class="premium-list-head"><h3>Seus imóveis</h3><span class="muted">' + data.length + ' nesta página</span></div><div class="property-grid">' +
-    (data.map(home => '<article class="property-card">' + picture(home, home.photos[0]) + '<p class="muted">' +
-      escape(home.data.district) + ' · ' + escape(home.data.city) + '</p><h3>' + escape(home.data.title) +
-      '</h3><p class="price">' + money(home.data.price) + '</p>' +
-      '<p>' + escape(home.data.code) + ' · ' + escape(home.data.status) + ' · ' + home.photos.length + '/5 fotos</p>' +
-      link('Editar cadastro', 'editar/' + home.id) +
-      (home.data.status === 'Publicado' ? ' ' + link('Ver na vitrine', 'imovel/' + home.id, true) : '') +
-      '</article>').join('') ||
+    (data.map(home => '<article class="property-card"><div class="property-card-media">'+picture(home,home.photos[0])+
+      '</div><div class="property-card-info"><p class="muted">'+
+      [home.data.district,home.data.city].filter(Boolean).map(escape).join(' · ')+'</p><h3>'+escape(home.data.title)+'</h3>'+
+      '<div class="property-card-meta"><span class="chips">'+escape(home.data.status)+'</span><small>'+
+      escape(home.data.code)+' · '+home.photos.length+'/5 fotos</small></div></div><div class="property-card-value">'+
+      '<p class="price">'+money(home.data.price)+'</p><div class="property-card-actions">'+link('Editar cadastro','editar/'+home.id,true)+
+      (home.data.status === 'Publicado' ? ' '+link('Ver na vitrine','imovel/'+home.id,true) : '')+'</div></div></article>').join('') ||
       '<p>' + (q ? 'Nenhum imóvel corresponde à busca.' : 'Nenhum imóvel cadastrado.') + '</p>') +
     '</div><div class="row">' + (page > 1 ? link('Página anterior', 'admin?' + query(page-1), true) : '') +
     (data.length === 30 ? link('Próxima página', 'admin?' + query(page+1), true) : '') + '</div>' +

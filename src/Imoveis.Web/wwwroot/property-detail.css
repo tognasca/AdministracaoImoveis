@@ -72,3 +72,7 @@
 }
 .property-similar { margin-top:clamp(28px,5vw,58px); }
 .property-similar h2 { font-size:clamp(1.75rem,3vw,2.6rem); margin-bottom:20px; }
+
+.estate-site .property-heading { background:var(--estate-panel); color:var(--estate-ink); padding:clamp(16px,3vw,36px); border:1px solid var(--estate-rule); border-radius:12px; }
+.estate-site .property-inquiry,.estate-site .property-characteristics dl > div { background:var(--estate-surface); }
+.estate-site .property-price p,.estate-site .property-characteristics dt { color:inherit; opacity:.84; }
