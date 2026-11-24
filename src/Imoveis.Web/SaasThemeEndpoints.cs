@@ -45,7 +45,7 @@ static class SaasThemeEndpoints
                 previous_accent=saas_tenant_themes.accent_color,template=EXCLUDED.template,
                 accent_color=EXCLUDED.accent_color,draft_template=NULL,draft_accent=NULL,updated_at=now()
             """;
-        await using var command = db.CreateCommand(draft ? saveDraft : publish);
+        await using var command = db.CreateCommand(draft ? saveDraft : publish + ";\n" + ModelHeroes.PublishSql);
         command.Parameters.AddWithValue("tenant", tenant);
         command.Parameters.AddWithValue("template", input.Template);
         command.Parameters.AddWithValue("accent", input.AccentColor.ToUpperInvariant());

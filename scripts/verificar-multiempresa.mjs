@@ -176,6 +176,34 @@ assert.equal((await call(first,'/api/vitrine/tema',200)).template,'minimal');
 await call(first,theme+'/restaurar',204,'POST');
 assert.equal((await call(first,'/api/vitrine/tema',200)).template,'premium');
 
+const heroAdmin = admin+'/vitrine/hero/';
+const heroPublic = '/media/vitrine/hero';
+const heroUpload = Buffer.concat([Buffer.from('--hero-boundary\r\nContent-Disposition: form-data; name="mode"\r\n\r\nupload\r\n'+
+  '--hero-boundary\r\nContent-Disposition: form-data; name="image"; filename="hero.png"\r\nContent-Type: image/png\r\n\r\n'),
+  png, Buffer.from('\r\n--hero-boundary--\r\n')]);
+const heroMultipart = 'multipart/form-data; boundary=hero-boundary';
+const propertyHero = (id,photo) => Buffer.from(['mode=property','propertyId='+id,'photoId='+photo].join('&'));
+const formContent = 'application/x-www-form-urlencoded';
+await call(first,heroAdmin+'premium',204,'PUT',heroUpload,heroMultipart);
+assert.equal((await call(first,heroAdmin+'premium',200)).draft,true);
+assert.deepEqual(await call(first,heroAdmin+'premium/imagem',200),png);
+await call(company(first.host),heroAdmin+'premium/imagem',401);
+await call(first,heroPublic,404);
+await call(second,heroAdmin+'premium',400,'PUT',propertyHero(firstId,photo),formContent);
+await call(first,theme,204,'PUT',{template:'premium',accentColor:'#123456'});
+assert.equal((await call(first,heroAdmin+'premium',200)).draft,false);
+assert.deepEqual(await call(first,heroPublic,200),png);
+assert.equal((await call(first,storefront,200)).banner,heroPublic);
+await call(second,heroPublic,404);
+await call(first,heroAdmin+'boutique',204,'PUT',propertyHero(firstId,photo),formContent);
+await call(first,theme,204,'PUT',{template:'boutique',accentColor:'#123456'});
+assert.deepEqual(await call(first,heroPublic,200),png);
+await call(first,heroAdmin+'boutique',204,'PUT',Buffer.from('mode=default'),formContent);
+assert.deepEqual(await call(first,heroPublic,200),png);
+await call(first,theme,204,'PUT',{template:'boutique',accentColor:'#123456'});
+await call(first,heroPublic,404);
+await call(first,theme,204,'PUT',{template:'premium',accentColor:'#123456'});
+console.log('Hero por modelo: upload, foto publicada, rascunho, fallback e isolamento.');
 const signature = '/modelos/'+'b'.repeat(64);
 assert.deepEqual(await call(first,importPath+signature,200),[]);
 assert.equal((await call(second,importPath+signature,200))[0].source,'Outro tenant');

@@ -14,6 +14,7 @@ PropertyEndpoints.Map(admin);
 MediaEndpoints.Map(admin);
 StorefrontEndpoints.Map(admin);
 SaasThemeEndpoints.Map(admin);
+ModelHeroes.Map(admin);
 StaticStorefrontPackage.Map(admin);
 SaasAdministrationEndpoints.Map(app);
 LeadEndpoints.Map(admin);

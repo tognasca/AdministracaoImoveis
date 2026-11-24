@@ -33,7 +33,12 @@ export async function showSettings(isCurrent) {
         '<option value="' + value + '"' + (value === selectedTheme.template ? ' selected' : '') + '>' + label + '</option>').join('') +
       '</select></label><label>Cor principal<input name="accentColor" type="color" value="' + escape(selectedTheme.accentColor) + '"></label><div class="row"><button>Publicar modelo</button><button type="button" class="alt" id="theme-draft">Salvar rascunho</button>' +
       (themes.canRestore ? '<button type="button" class="alt" id="theme-restore">Restaurar anterior</button>' : '') +
-      '</div></form><label>Largura da prévia<select id="preview-width"><option value="1280">Desktop</option><option value="768">Tablet</option><option value="390">Smartphone</option></select></label>' +
+      '</div></form><fieldset id="hero-settings"><legend>Imagem do hero por modelo</legend>' +
+      '<label>Fonte da imagem<select id="hero-source"><option value="default">Usar banner padrão</option><option value="upload">Enviar imagem própria</option><option value="property">Usar foto de um imóvel publicado</option></select></label>' +
+      '<div id="hero-upload" hidden><label>Imagem própria<input id="hero-file" type="file" accept="image/jpeg,image/png,image/webp"></label></div>' +
+      '<div id="hero-property" hidden><label>Buscar imóvel publicado<input id="hero-search" type="search" maxlength="120"></label><button type="button" class="alt" id="hero-find">Buscar imóveis</button>' +
+      '<label>Imóvel<select id="hero-homes"></select></label><label>Foto<select id="hero-photos"></select></label><img id="hero-photo-preview" alt="Foto selecionada" hidden></div>' +
+      '<div class="row"><button type="button" class="alt" id="hero-save">Salvar imagem para a prévia</button><span id="hero-status" role="status"></span></div></fieldset><label>Largura da prévia<select id="preview-width"><option value="1280">Desktop</option><option value="768">Tablet</option><option value="390">Smartphone</option></select></label>' +
       '<div class="storefront-preview-frame"><iframe id="storefront-preview" title="Prévia da vitrine" loading="lazy" src="/?preview=theme#vitrine"></iframe></div></section>' +
       '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
       '<label>Nome do site<input name="siteName" required maxlength="80" value="' + escape(settings.name) + '"></label>' +
@@ -52,13 +57,13 @@ export async function showSettings(isCurrent) {
       (external?.enabled ? '<section class="box"><h3>Vitrine na sua hospedagem</h3>' +
         '<p>Extraia o ZIP na pasta onde deseja publicar a vitrine. Os imóveis e a identidade visual são carregados deste sistema.</p>' +
         '<a class="btn" href="/api/admin/vitrine/pacote" download>Baixar arquivos da vitrine</a></section>' : '') +
-      images.map(asset => imageForm(asset, settings[asset.key])).join('') :
+      images.map(asset => imageForm(asset, asset.key === 'banner' ? settings.defaultBanner : settings[asset.key])).join('') :
       '<p>Acesso restrito a administradores.</p>');
   bindLogout();
   if (!allowed) return;
 
   async function change(action, message) {
-    const controls = [...app.querySelectorAll('#template-form :is(button,input,select), #brand-form :is(button,input,select), #logo-form :is(button,input,select), #banner-form :is(button,input,select)')];
+    const controls = [...app.querySelectorAll('#template-form :is(button,input,select), #brand-form :is(button,input,select), #logo-form :is(button,input,select), #banner-form :is(button,input,select), #hero-settings :is(button,input,select)')];
     controls.forEach(control => { control.disabled = true; });
     try {
       await action();
@@ -74,9 +79,106 @@ export async function showSettings(isCurrent) {
   });
   const frame = app.querySelector('#storefront-preview');
   const size = app.querySelector('#preview-width');
-  const sendPreview = () => frame.contentWindow?.postMessage({type:'storefront-theme',theme:readTheme()},location.origin);
+  const hero = app.querySelector('#hero-settings');
+  const mode = hero.querySelector('#hero-source');
+  const file = hero.querySelector('#hero-file');
+  const homes = hero.querySelector('#hero-homes');
+  const photos = hero.querySelector('#hero-photos');
+  const status = hero.querySelector('#hero-status');
+  const selectedPhoto = hero.querySelector('#hero-photo-preview');
+  function showPhoto() {
+    selectedPhoto.hidden = !homes.value || !photos.value;
+    if (!selectedPhoto.hidden) selectedPhoto.src = '/media/'+encodeURIComponent(homes.value)+'/'+encodeURIComponent(photos.value);
+    else selectedPhoto.removeAttribute('src');
+  }
+  const readHeroPath = template => endpoint + 'hero/' + encodeURIComponent(template);
+  let found = [], dirty = false, heroLoaded = false;
+  let previewVersion = Date.now();
+  const sendPreview = () => frame.contentWindow?.postMessage({
+    type:'storefront-theme',theme:readTheme(),banner:readHeroPath(readTheme().template)+'/imagem?v='+previewVersion
+  },location.origin);
+  function fields() {
+    hero.querySelector('#hero-upload').hidden = mode.value !== 'upload';
+    hero.querySelector('#hero-property').hidden = mode.value !== 'property';
+  }
+  async function loadHero() {
+    const template = readTheme().template;
+    hero.disabled = true;
+    heroLoaded = dirty = false;
+    try {
+      const settings = await request(readHeroPath(template));
+      if (!isCurrent() || readTheme().template !== template) return;
+      mode.value = settings.mode;
+      file.value = '';
+      found = [];
+      homes.replaceChildren(new Option(settings.propertyId ? 'Imóvel selecionado' : 'Selecione um imóvel', settings.propertyId ?? ''));
+      photos.replaceChildren(new Option(settings.photoId ? 'Foto selecionada' : 'Selecione uma foto', settings.photoId ?? ''));
+      status.textContent = settings.draft ? 'Imagem salva como rascunho.' : '';
+      showPhoto();
+      heroLoaded = true;
+      fields();
+      sendPreview();
+    } catch (error) { if (isCurrent()) status.textContent = error.message; }
+    finally { if (readTheme().template === template) hero.disabled = false; }
+  }
+  mode.onchange = fields;
+  mode.addEventListener('change', () => { dirty = true; });
+  file.onchange = () => { dirty = true; };
+  homes.onchange = () => {
+    const home = found.find(item => item.id === homes.value);
+    photos.replaceChildren(new Option('Selecione uma foto',''),
+      ...(home?.photos ?? []).map((id,i) => new Option('Foto '+(i+1),id)));
+    dirty = true;
+    showPhoto();
+  };
+  photos.onchange = () => {
+    dirty = true;
+    showPhoto();
+    if (!photos.value) return;
+    status.textContent = 'Salve a imagem para atualizar a prévia.';
+  };
+  hero.querySelector('#hero-find').onclick = async () => {
+    try {
+      const q = hero.querySelector('#hero-search').value.trim();
+      const template = readTheme().template;
+      const matches = await request('/api/imoveis?q='+encodeURIComponent(q));
+      if (!isCurrent() || template !== readTheme().template) return;
+      found = matches.filter(item => item.photos.length);
+      homes.replaceChildren(new Option(found.length ? 'Selecione um imóvel' : 'Nenhum imóvel com fotos',''),
+        ...found.map(item => new Option(item.data.title,item.id)));
+      photos.replaceChildren(new Option('Selecione uma foto',''));
+      showPhoto();
+    } catch (error) { status.textContent = error.message; }
+  };
+  async function saveHero() {
+    if (!heroLoaded) throw Error('Aguarde o carregamento da imagem deste modelo.');
+    if (!dirty) return;
+    const data = new FormData();
+    data.set('mode',mode.value);
+    if (mode.value === 'upload') {
+      if (!file.files[0]) throw Error('Selecione uma imagem própria.');
+      data.set('image',await optimizeImage(file.files[0],1920),'hero.webp');
+    }
+    if (mode.value === 'property') {
+      data.set('propertyId',homes.value);
+      data.set('photoId',photos.value);
+    }
+    await request(readHeroPath(readTheme().template),'PUT',data);
+    dirty = false;
+    previewVersion = Date.now();
+    status.textContent = 'Imagem salva como rascunho.';
+    sendPreview();
+  }
+  hero.querySelector('#hero-save').onclick = async () => {
+    hero.disabled = templateForm.elements.template.disabled = true;
+    try { await saveHero(); }
+    catch (error) { status.textContent = error.message; }
+    finally { hero.disabled = templateForm.elements.template.disabled = false; }
+  };
+  templateForm.elements.template.onchange = loadHero;
+  loadHero();
   frame.onload = sendPreview;
-  templateForm.oninput = sendPreview;
+  templateForm.elements.accentColor.oninput = sendPreview;
   const stage = frame.parentElement;
   const fitPreview = () => {
     const width = Number(size.value);
@@ -95,10 +197,10 @@ export async function showSettings(isCurrent) {
   fitPreview();
   templateForm.onsubmit = event => {
     event.preventDefault();
-    change(() => request(endpoint + 'tema','PUT',readTheme()), 'Modelo visual publicado.');
+    change(async () => { await saveHero(); await request(endpoint + 'tema','PUT',readTheme()); }, 'Modelo visual publicado.');
   };
   app.querySelector('#theme-draft').onclick = () =>
-    change(() => request(endpoint + 'tema/rascunho','PUT',readTheme()), 'Rascunho do modelo salvo.');
+    change(async () => { await saveHero(); await request(endpoint + 'tema/rascunho','PUT',readTheme()); }, 'Rascunho do modelo salvo.');
   const restore = app.querySelector('#theme-restore');
   if (restore) restore.onclick = () => {
     if (confirm('Restaurar a versão anterior do modelo e da cor principal?'))
