@@ -7,7 +7,7 @@ RUN dotnet publish Imoveis.Web/Imoveis.Web.csproj --no-restore -c Release -o /ou
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-por tesseract-ocr-eng && rm -rf /var/lib/apt/lists/*
 COPY --from=build /out .
 ENV ASPNETCORE_WEBROOT=/app/wwwroot
 RUN test -s /app/wwwroot/index.html && test -s /app/wwwroot/app.js

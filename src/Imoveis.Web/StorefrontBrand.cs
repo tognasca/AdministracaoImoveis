@@ -5,9 +5,10 @@ sealed class StorefrontBrand(NpgsqlDataSource db)
     private const string DefaultName = "Imóveis Cotia";
     private const string DefaultColor = "#6B5140";
 
-    public async Task<(string Name, string Color, string? Email, string? WhatsApp, string TextColor, int ColorOpacity)> Read(CancellationToken ct)
+    public async Task<(string Name, string Color, string? Email, string? WhatsApp, string TextColor, int ColorOpacity)> Read(CancellationToken ct, Guid tenantId)
     {
-        await using var command = db.CreateCommand("SELECT name, color, email, whatsapp, text_color, color_opacity FROM storefront_brand WHERE singleton");
+        await using var command = db.CreateCommand("SELECT name, color, email, whatsapp, text_color, color_opacity FROM storefront_brand WHERE tenant_id=@tenant");
+        command.Parameters.AddWithValue("tenant", tenantId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct)
             ? (reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
@@ -15,15 +16,16 @@ sealed class StorefrontBrand(NpgsqlDataSource db)
             : (DefaultName, DefaultColor, null, null, "auto", 100);
     }
 
-    public async Task Save(string name, string? color, string? email, string? whatsapp, string? textColor, int? colorOpacity, CancellationToken ct)
+    public async Task Save(string name, string? color, string? email, string? whatsapp, string? textColor, int? colorOpacity, CancellationToken ct, Guid tenantId)
     {
         await using var command = db.CreateCommand("""
-            INSERT INTO storefront_brand (singleton, name, color, email, whatsapp, text_color, color_opacity)
-            VALUES (true, @name, coalesce(@color, @default_color), @email, @whatsapp, coalesce(@text_color, 'auto'), coalesce(@opacity, 100))
-            ON CONFLICT (singleton) DO UPDATE SET name = EXCLUDED.name, color = coalesce(@color, storefront_brand.color),
+            INSERT INTO storefront_brand (tenant_id, name, color, email, whatsapp, text_color, color_opacity)
+            VALUES (@tenant, @name, coalesce(@color, @default_color), @email, @whatsapp, coalesce(@text_color, 'auto'), coalesce(@opacity, 100))
+            ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name, color = coalesce(@color, storefront_brand.color),
                 email = coalesce(@email, storefront_brand.email), whatsapp = coalesce(@whatsapp, storefront_brand.whatsapp),
                 text_color = coalesce(@text_color, storefront_brand.text_color), color_opacity = coalesce(@opacity, storefront_brand.color_opacity)
             """);
+        command.Parameters.AddWithValue("tenant", tenantId);
         command.Parameters.AddWithValue("name", name);
         command.Parameters.AddWithValue("color", NpgsqlTypes.NpgsqlDbType.Text, (object?)color ?? DBNull.Value);
         command.Parameters.AddWithValue("email", NpgsqlTypes.NpgsqlDbType.Text, (object?)email ?? DBNull.Value);

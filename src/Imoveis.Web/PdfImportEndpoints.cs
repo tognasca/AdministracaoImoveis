@@ -5,10 +5,12 @@ static class PdfImportEndpoints
     private const int MaxFileBytes = 8_000_000;
     private const int MaxTextChars = 500_000;
     private const int MaxPages = 100;
+    private const int MaxOcrPages = 20;
+    private static readonly SemaphoreSlim OcrSlots = new(1);
 
     public static void Map(RouteGroupBuilder admin)
     {
-        admin.MapPost("/importacoes/pdf/extrair", Extract);
+        admin.MapPost("/importacoes/pdf/extrair", Extract).TrackImportFailure("Extração de texto ou OCR");
     }
 
     private static async Task<IResult> Extract(HttpRequest request, CancellationToken cancellationToken)
@@ -76,9 +78,22 @@ static class PdfImportEndpoints
                 if (pages[^1].Length == 0) pages = pages[..^1];
                 if (pages.Length > MaxPages)
                     return Results.BadRequest("Divida o PDF em arquivos de até 100 páginas.");
-                if (pages.All(string.IsNullOrWhiteSpace))
-                    return Results.BadRequest("O PDF não contém texto selecionável. Arquivos digitalizados precisam passar por OCR.");
-                return Results.Ok(new { pages });
+                if (pages.Any(page => !string.IsNullOrWhiteSpace(page)))
+                    return Results.Ok(new { pages });
+
+                if (pages.Length is < 1 or > MaxOcrPages)
+                    return Results.BadRequest("Divida PDFs digitalizados em arquivos de até 20 páginas.");
+                if (!await OcrSlots.WaitAsync(0, deadline.Token))
+                    return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+                try
+                {
+                    deadline.CancelAfter(TimeSpan.FromSeconds(60));
+                    var recognized = await RecognizePages(path, pages.Length, deadline.Token);
+                    return recognized.Any(page => !string.IsNullOrWhiteSpace(page))
+                        ? Results.Ok(new { pages = recognized })
+                        : Results.BadRequest("O OCR não encontrou texto legível no PDF.");
+                }
+                finally { OcrSlots.Release(); }
             }
             finally
             {
@@ -93,6 +108,80 @@ static class PdfImportEndpoints
         {
             return Results.BadRequest("A extração demorou demais. Divida o PDF em partes menores.");
         }
+        catch (InvalidDataException)
+        {
+            return Results.BadRequest("Não foi possível reconhecer o PDF digitalizado. Confira o arquivo ou divida-o em partes menores.");
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return Results.Problem("O serviço de extração de PDF está indisponível.", statusCode: 503);
+        }
         finally { File.Delete(path); }
+    }
+
+    private static async Task<string[]> RecognizePages(string pdf, int count, CancellationToken ct)
+    {
+        var directory = Directory.CreateTempSubdirectory("imoveis-ocr-");
+        try
+        {
+            var pages = new string[count];
+            var remaining = MaxTextChars;
+            for (var index = 0; index < count; index++)
+            {
+                var page = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var prefix = Path.Combine(directory.FullName, "page");
+                await RunOcrTool("pdftoppm",
+                    ["-f", page, "-l", page, "-scale-to", "2400", "-singlefile", "-gray", pdf, prefix], 0, ct);
+                pages[index] = await RunOcrTool("tesseract", [prefix + ".pgm", "stdout", "-l", "por+eng"], remaining, ct);
+                remaining -= pages[index].Length;
+                File.Delete(prefix + ".pgm");
+            }
+            return pages;
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
+    private static async Task<string> RunOcrTool(string tool, string[] arguments, int limit, CancellationToken ct)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo(tool)
+            {
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }
+        };
+        foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
+        process.StartInfo.Environment["OMP_THREAD_LIMIT"] = "1";
+        if (!process.Start()) throw new InvalidDataException();
+        try
+        {
+            var errors = process.StandardError.BaseStream.CopyToAsync(Stream.Null, ct);
+            var text = new System.Text.StringBuilder();
+            var buffer = new char[4096];
+            int read;
+            while ((read = await process.StandardOutput.ReadAsync(buffer.AsMemory(), ct)) > 0)
+            {
+                if (text.Length + read > limit) throw new InvalidDataException();
+                text.Append(buffer, 0, read);
+            }
+            await process.WaitForExitAsync(ct);
+            await errors;
+            if (process.ExitCode != 0) throw new InvalidDataException();
+            return text.ToString();
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None);
+                }
+                catch (InvalidOperationException) { }
+            }
+        }
     }
 }

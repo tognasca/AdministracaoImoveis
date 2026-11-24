@@ -70,10 +70,7 @@ result = classifyPdfPages(['ZONA SUL\n'+catalog]);
 assert.equal(result.properties[0].data.zone,'Zona Sul');
 console.log('OK: opções da zona, aliases, dropdown seguro e leitura da seção Kallas.');
 
-const importsSource = (await readFile(new URL('../src/Imoveis.Web/wwwroot/imports.js',import.meta.url),'utf8'))
-  .replace("'./property-zones.js'",JSON.stringify('data:text/javascript;base64,'+Buffer.from(zonesSource).toString('base64')))
-  .replace("import {delimited, excel} from './import-files.js';",'');
-const {prepare} = await import('data:text/javascript;base64,'+Buffer.from(importsSource).toString('base64'));
+const {prepare} = await import('../src/Imoveis.Web/wwwroot/imports.js');
 const zonePreview = prepare([['Z-1','Casa','Z.L.'],['Z-2','Casa','Inválida']],['code','title','zone'],[],'Teste');
 assert.equal(zonePreview[0].data.zone,'Zona Leste');
 assert.equal(zonePreview[1].status,'Revisar');

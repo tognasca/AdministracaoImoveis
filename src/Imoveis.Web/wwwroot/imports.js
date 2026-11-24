@@ -1,10 +1,12 @@
 import {normalizeZone, standardZones} from './property-zones.js';
-import {delimited, excel} from './import-files.js';
+import {delimited, excel, structuredRows} from './import-files.js';
+
+import {catalogWorkbook} from './pdf-excel.js';
 
 const endpoint = '/api/admin/importacoes';
 const labels = {code:'Código do imóvel',title:'Título',kind:'Tipo de imóvel',bedrooms:'Dormitórios',
   district:'Bairro',city:'Cidade',zone:'Zona',location:'Bairro e cidade',price:'Preço',size:'Área (m²)',notes:'Observações'};
-const aliases = {code:['codigo','cod','id','codigoimovel'],title:['titulo','nome','descricao'],
+const aliases = {code:['codigo','cod','codigoimovel','id'],title:['titulo','nome','descricao'],
   kind:['ctipo','tipoimovel','tipo'],bedrooms:['dormitorio','dormitorios','dormitoriosquanto','quartos'],
   district:['bairro'],city:['cidade','municipio'],zone:['zona','regiao','zonacidade'],location:['local','localizacao'],
   price:['valor','preco','vlvenda','precovenda'],size:['area','aream2','metragem'],notes:['observacao','observacoes','obs','notas']};
@@ -14,7 +16,10 @@ const codeKey = value => String(value ?? '').trim().toLowerCase();
 const emptyData = {title:'',kind:'',district:'',city:'',price:0,bedrooms:0,size:0,notes:'',status:'Rascunho',version:0};
 const example = 'CODIGO;CTIPO;Dormitórios quanto;Local;VL_VENDA;Título;Observações\r\nIM-104;CASA;03;Granja Viana - Cotia/SP;875000;Casa na Granja Viana;Confirmar disponibilidade antes da visita\r\nIM-105;APTO;02;Centro - Cotia/SP;380000;Apartamento no Centro;Agendar visita com antecedência';
 function download(name, content) {
-  const url = URL.createObjectURL(new Blob(['\ufeff',content], {type:'text/csv;charset=utf-8'}));
+  saveFile(name, new Blob(['\ufeff',content], {type:'text/csv;charset=utf-8'}));
+}
+function saveFile(name, blob) {
+  const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), {href:url,download:name});
   a.click();
   setTimeout(() => URL.revokeObjectURL(url),1000);
@@ -83,7 +88,7 @@ export function prepare(rows,mapping,existing,source) {
 }
 export function mountImport(ui) {
   const {app,request,escape,notice,report,adminNav,bindLogout,isCurrent} = ui;
-  let originalFile = null;
+  let originalFile = null, skippedListings = 0;
   let rows = [], fileName = '', mapping = [], source = '', signature = '', models = [], lookupText = '';
   const start = stage => {
     app.innerHTML = adminNav()+'<h2>Importar imóveis</h2><p class="muted">'+stage+' de 3 · Arquivo → Mapeamento → Conferência</p>'+notice;
@@ -92,9 +97,29 @@ export function mountImport(ui) {
   const choose = () => {
     originalFile = null;
     start(1);
-    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV ou TXT delimitado. No Excel, será usada a primeira aba.</p>'+
-      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt"></label>'+
+    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON, XML ou VRSync. No Excel, será usada a primeira aba.</p>'+
+      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml,.vrsync"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
+    const exports = '/api/admin/exportacoes/imoveis?limit=5000&format=';
+    app.insertAdjacentHTML('beforeend','<section class="box"><h3>Exportar catálogo</h3>'+
+      '<p>Até 5.000 imóveis por arquivo.</p><div class="row">'+
+      ['json','csv','xml'].map(format => '<a download="imoveis.'+format+'" href="'+exports+format+'">'+format.toUpperCase()+'</a>').join('')+
+      '<a target="_blank" rel="noopener" href="'+exports+'impressao">Imprimir ou salvar PDF</a>'+
+      '<button type="button" class="alt" id="catalog-xlsx">Baixar Excel</button></div></section>');
+    const excelButton = app.querySelector('#catalog-xlsx');
+    excelButton.onclick = async () => {
+      excelButton.disabled = true;
+      try {
+        const {properties} = await request(exports+'json');
+        if (isCurrent()) saveFile('imoveis.xlsx', new Blob([catalogWorkbook(properties)], {
+          type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }));
+      } catch (error) {
+        if (isCurrent()) report(error.message);
+      } finally {
+        excelButton.disabled = false;
+      }
+    };
     const savedModels = app.querySelector('#saved-models');
     request(endpoint+'/modelos').then(items => {
       savedModels.innerHTML = '<h3>Mapeamentos salvos</h3>' + (items.map(item => '<p><strong>'+escape(item.source)+
@@ -108,6 +133,13 @@ export function mountImport(ui) {
         (item.hasOriginal ? ' · <a href="'+endpoint+'/historico/'+encodeURIComponent(item.id)+'/arquivo">Baixar original</a>' : '')+'</p>').join('') ||
         '<p>Nenhum arquivo importado.</p>');
     }).catch(() => { history.innerHTML = '<h3>Últimas importações</h3><p>Não foi possível consultar o histórico.</p>'; });
+    app.insertAdjacentHTML('beforeend','<section class="box" id="import-failures"><h3>Falhas de processamento</h3><p>Carregando…</p></section>');
+    const failures = app.querySelector('#import-failures');
+    request(endpoint+'/falhas').then(items => {
+      failures.innerHTML = '<h3>Falhas de processamento</h3>' + (items.map(item =>
+        '<p>'+escape(item.operation)+' · HTTP '+escape(item.status)+' · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+'</p>'
+      ).join('') || '<p>Nenhuma falha registrada.</p>');
+    }).catch(() => { failures.innerHTML = '<h3>Falhas de processamento</h3><p>Não foi possível consultar o histórico.</p>'; });
     app.querySelector('#example').onclick = () => download('imoveis-exemplo.csv',example);
     app.querySelector('#import-file').onchange = async event => {
       const file = event.target.files[0];
@@ -115,7 +147,15 @@ export function mountImport(ui) {
       try {
         event.target.disabled = true;
         if (file.size > 8e6) throw Error('Selecione um arquivo de até 8 MB.');
-        rows = /\.xlsx$/i.test(file.name) ? await excel(file) : delimited(await file.text());
+        const extension = file.name.split('.').at(-1).toLowerCase();
+        skippedListings = 0;
+        if (extension === 'xlsx') rows = await excel(file);
+        else {
+          const text = await file.text();
+          rows = ['json','xml','vrsync'].includes(extension)
+            ? structuredRows(text, extension, count => { skippedListings = count; })
+            : delimited(text);
+        }
         if (rows.length < 2 || rows[0].length < 1) throw Error('Inclua o cabeçalho e ao menos uma linha de dados.');
         if (rows.length > 5001 || rows[0].length > 100) throw Error('Use até 5.000 registros e 100 colunas por arquivo.');
         fileName = file.name;
@@ -123,7 +163,8 @@ export function mountImport(ui) {
         const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(Array.from(rows[0],normalize))));
         signature = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('');
         models = await request(endpoint+'/modelos/'+signature);
-        mapping = Array.from(rows[0],col => Object.keys(aliases).find(k => aliases[k].includes(normalize(col))) ?? '');
+        const hasCode = rows[0].some(col => ['code','codigo','cod','codigoimovel'].includes(normalize(col)));
+        mapping = Array.from(rows[0],col => hasCode && normalize(col) === 'id' ? '' : Object.keys(aliases).find(k => [k,...aliases[k]].includes(normalize(col))) ?? '');
         source = '';
         if (models.length === 1 && models[0].mapping.length === mapping.length) {
           mapping = models[0].mapping;
@@ -140,6 +181,7 @@ export function mountImport(ui) {
   const map = () => {
     start(2);
     const options = Object.entries(labels);
+    if (skippedListings) report(skippedListings+' anúncios fora do formato de venda em reais foram ignorados.');
     app.insertAdjacentHTML('beforeend','<form id="mapping"><div class="box"><h3>'+escape(fileName)+'</h3>'+
       '<label>Origem dos códigos<input required maxlength="100" name="source" value="'+escape(source)+'"></label>'+
       (models.length ? '<p></p><label>Modelo salvo<select id="models"><option value="">Selecionar modelo</option>'+

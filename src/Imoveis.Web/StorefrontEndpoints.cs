@@ -5,7 +5,7 @@ static class StorefrontEndpoints
     public static void Map(RouteGroupBuilder admin)
     {
         var storefront = admin.MapGroup("/vitrine").RequireAuthorization(policy => policy.RequireRole("Administrador"));
-        storefront.MapPut("/identidade", async (BrandInput input, StorefrontBrand brand, CancellationToken ct) =>
+        storefront.MapPut("/identidade", async (BrandInput input, StorefrontBrand brand, TenantContext tenant, CancellationToken ct) =>
         {
             var name = input.Name?.Trim();
             if (name is null || name.Length is < 1 or > 80 || name.Any(char.IsControl))
@@ -24,7 +24,7 @@ static class StorefrontEndpoints
                 return Results.BadRequest("Escolha texto automático, preto ou branco.");
             if (input.ColorOpacity is < 0 or > 100)
                 return Results.BadRequest("Informe uma opacidade entre 0 e 100%.");
-            await brand.Save(name, color?.ToUpperInvariant(), email, whatsapp, input.TextColor, input.ColorOpacity, ct);
+            await brand.Save(name, color?.ToUpperInvariant(), email, whatsapp, input.TextColor, input.ColorOpacity, ct, tenant.Id);
             return Results.NoContent();
         });
         MapImage(storefront, "/banner", StorefrontImage.Banner);
@@ -33,7 +33,7 @@ static class StorefrontEndpoints
 
     private static void MapImage(RouteGroupBuilder storefront, string route, StorefrontImage asset)
     {
-        storefront.MapPut(route, async (HttpRequest request, StorefrontImages images, CancellationToken ct) =>
+        storefront.MapPut(route, async (HttpRequest request, StorefrontImages images, TenantContext tenant, CancellationToken ct) =>
         {
             if (!request.HasFormContentType) return Results.BadRequest("Selecione uma imagem.");
             IFormCollection form;
@@ -41,11 +41,11 @@ static class StorefrontEndpoints
             catch (InvalidDataException) { return Results.StatusCode(413); }
             if (form.Files.Count != 1 || form.Files.GetFile("photo") is not { } photo)
                 return Results.BadRequest("Envie uma imagem por vez.");
-            return Results.StatusCode(await images.Save(asset, photo, ct));
+            return Results.StatusCode(await images.Save(asset, photo, ct, tenant.Id));
         });
-        storefront.MapDelete(route, (StorefrontImages images) =>
+        storefront.MapDelete(route, (StorefrontImages images, TenantContext tenant) =>
         {
-            images.Remove(asset);
+            images.Remove(asset, tenant.Id);
             return Results.NoContent();
         });
     }

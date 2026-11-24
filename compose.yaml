@@ -22,6 +22,10 @@ services:
       ConnectionStrings__Imoveis: 'Host=db;Database=imoveis;Username=imoveis;Password=${POSTGRES_PASSWORD}'
       Admin__Password: ${ADMIN_PASSWORD:?Configure ADMIN_PASSWORD no .env}
       Vitrine__WhatsApp: ${VITRINE_WHATSAPP:-}
+      Saas__EnableMultiTenant: ${SAAS_ENABLE_MULTI_TENANT:-false}
+      Saas__PublicCatalogBaseUrl: ${SAAS_PUBLIC_CATALOG_BASE_URL:-}
+      Saas__PlatformAdminKey: ${SAAS_PLATFORM_ADMIN_KEY:-}
+      Saas__LegacyHostnames: ${SAAS_LEGACY_HOSTNAMES:-}
       Media__Path: /media/imoveis
     ports:
       - '127.0.0.1:${IMOVEIS_PORT:-5086}:8080'

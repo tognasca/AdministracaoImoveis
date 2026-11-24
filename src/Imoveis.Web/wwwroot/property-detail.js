@@ -1,17 +1,15 @@
 import {app, escape, money} from './ui.js';
 
-function photoUrl(id, photo) {
-  return '/media/' + encodeURIComponent(id) + '/' + encodeURIComponent(photo);
-}
+import {catalogPhoto, storefrontHref} from './public-catalog.js';
 
 function gallery(home) {
   const total = home.photos.length;
   if (!total) return '<div class="property-photo-empty">Este imóvel ainda não tem fotos.</div>';
   const thumbs = home.photos.map((photo, index) => '<button type="button" data-index="' + index +
     '" aria-label="Exibir foto ' + (index + 1) + '" aria-pressed="' + (index === 0) +
-    '"><img src="' + escape(photoUrl(home.id, photo)) + '" alt="" loading="lazy"></button>').join('');
+    '"><img src="' + escape(catalogPhoto(home.id, photo)) + '" alt="" loading="lazy"></button>').join('');
   return '<div class="property-photo-stage"><img id="property-cover" src="' +
-    escape(photoUrl(home.id, home.photos[0])) + '" alt="' + escape(home.data.title) + '">' +
+    escape(catalogPhoto(home.id, home.photos[0])) + '" alt="' + escape(home.data.title) + '">' +
     '<button type="button" class="property-expand" id="property-expand">Ampliar foto <span aria-hidden="true">⤢</span></button>' +
     '<span class="property-photo-count" id="property-count" aria-live="polite">1 / ' + total + '</span></div>' +
     (total > 1 ? '<div class="property-thumbnails" id="property-thumbnails" aria-label="Selecionar foto">' + thumbs + '</div>' : '') +
@@ -35,7 +33,7 @@ function bindGallery(home) {
   const thumbs = [...app.querySelectorAll('#property-thumbnails button')];
   const select = index => {
     active = (index + total) % total;
-    const src = photoUrl(home.id, home.photos[active]);
+    const src = catalogPhoto(home.id, home.photos[active]);
     const label = (active + 1) + ' / ' + total;
     const alt = home.data.title + ' — foto ' + (active + 1);
     cover.src = src;
@@ -82,7 +80,7 @@ export function propertyDetail(home, settings, locationText) {
     '</div><p class="property-contact-hint">Revise e envie a mensagem no aplicativo escolhido.</p></form>' : '';
   const album = d.album && /^https?:\/\//i.test(d.album) ? '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="' +
     escape(d.album) + '">Ver álbum externo <span aria-hidden="true">↗</span></a>' : '';
-  app.innerHTML = '<div class="property-page"><a class="estate-back" href="/#vitrine">← Voltar aos imóveis</a>' +
+  app.innerHTML = '<div class="property-page"><a class="estate-back" href="' + storefrontHref('vitrine') + '">← Voltar aos imóveis</a>' +
     '<header class="property-heading"><div>' +
     (d.kind ? '<p class="estate-kicker">' + escape(d.kind) + '</p>' : '') + '<h1>' + escape(d.title) + '</h1>' +
     (locationText ? '<p class="property-location">' + locationText + '</p>' : '') + '</div>' +

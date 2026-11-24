@@ -144,3 +144,33 @@ td input,td select { min-width: 140px; }
 .pdf-grid .pdf-needs-review { border-color: #b87725; background: #fffbef; }
 
 .pdf-grid select { min-width: 160px; }
+
+/* Etapa 3: premium, responsive admin dashboard. Scoped to admin components. */
+.premium-heading { display:flex; align-items:flex-end; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+.premium-heading h2 { margin-bottom:6px; letter-spacing:-.035em; }
+.premium-eyebrow { color:#587363; font-size:.73rem; font-weight:800; letter-spacing:.16em; margin-bottom:7px; }
+.premium-actions { display:flex; flex-wrap:wrap; gap:9px; }
+.premium-actions a { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:9px 16px; border:1px solid #cbdad0; border-radius:9px; background:white; color:var(--forest); text-decoration:none; font-weight:700; font-size:.87rem; }
+.premium-actions a:first-child { background:var(--forest); border-color:var(--forest); color:white; }
+.premium-actions a:hover { text-decoration:underline; }
+.premium-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+.premium-stat { min-width:0; background:#fff; border:1px solid var(--line); border-radius:14px; padding:17px 19px; box-shadow:0 5px 20px #102d1c08; }
+.premium-stat span { display:block; color:var(--muted); font-size:.79rem; margin-bottom:8px; }
+.premium-stat strong { display:block; font-size:clamp(1.45rem,2.7vw,2.1rem); font-variant-numeric:tabular-nums; line-height:1.15; }
+.premium-import { background:linear-gradient(110deg,#fff,#f0f6f0); border-radius:14px; }
+.premium-list-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin:24px 0 12px; }
+.premium-list-head h3 { margin:0; }
+.property-card { border-radius:14px; box-shadow:0 4px 20px #17312809; transition:box-shadow .2s ease; }
+.property-card:hover { box-shadow:0 12px 30px #17312816; }
+.property-card .photo { height:clamp(170px,21vw,205px); }
+@media(max-width:850px) { .premium-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:480px) { .premium-stats { gap:8px; } .premium-stat { padding:13px; } .premium-actions { width:100%; } .premium-actions a { flex:1 1 135px; } .premium-heading { align-items:flex-start; } }
+
+.crm-list{display:grid;gap:14px}
+.crm-lead{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;align-items:start;padding:16px;border:1px solid #d8d8d8;border-radius:12px}
+.crm-lead p{margin:4px 0;overflow-wrap:anywhere}
+.crm-lead textarea,.crm-lead select,.crm-lead input{width:100%;min-width:0}
+.crm-lead > :last-child{grid-column:1/-1}
+.lead-history{margin-top:12px;overflow-wrap:anywhere}
+@media(max-width:900px){.crm-lead{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.crm-lead{grid-template-columns:minmax(0,1fr)}}

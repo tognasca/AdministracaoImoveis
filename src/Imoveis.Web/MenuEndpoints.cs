@@ -7,22 +7,22 @@ static class MenuEndpoints
     public static void Map(RouteGroupBuilder admin)
     {
         var menu = admin.MapGroup("/vitrine/menu");
-        menu.MapGet("", (StorefrontMenu store, CancellationToken ct) => store.List(false, ct));
-        menu.MapPost("", (MenuInput input, StorefrontMenu store, CancellationToken ct) =>
-            Save(Guid.NewGuid(), input, store, true, ct))
+        menu.MapGet("", (StorefrontMenu store, TenantContext tenant, CancellationToken ct) => store.List(false, ct, tenant.Id));
+        menu.MapPost("", (MenuInput input, StorefrontMenu store, TenantContext tenant, CancellationToken ct) =>
+            Save(Guid.NewGuid(), input, store, tenant, true, ct))
             .RequireAuthorization(policy => policy.RequireRole("Administrador"));
-        menu.MapPut("/{id:guid}", (Guid id, MenuInput input, StorefrontMenu store, CancellationToken ct) =>
-            Save(id, input, store, false, ct))
+        menu.MapPut("/{id:guid}", (Guid id, MenuInput input, StorefrontMenu store, TenantContext tenant, CancellationToken ct) =>
+            Save(id, input, store, tenant, false, ct))
             .RequireAuthorization(policy => policy.RequireRole("Administrador"));
         menu.MapDelete("/{id:guid}", DeleteCategory)
             .RequireAuthorization(policy => policy.RequireRole("Administrador"));
     }
 
-    private static async Task<IResult> DeleteCategory(Guid id, StorefrontMenu store, CancellationToken ct)
+    private static async Task<IResult> DeleteCategory(Guid id, StorefrontMenu store, TenantContext tenant, CancellationToken ct)
     {
         try
         {
-            return await store.DeleteCategory(id, ct) ? Results.NoContent() : Results.NotFound();
+            return await store.DeleteCategory(id, ct, tenant.Id) ? Results.NoContent() : Results.NotFound();
         }
         catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.ForeignKeyViolation)
         {
@@ -30,14 +30,14 @@ static class MenuEndpoints
         }
     }
 
-    private static async Task<IResult> Save(Guid id, MenuInput input, StorefrontMenu store, bool create, CancellationToken ct)
+    private static async Task<IResult> Save(Guid id, MenuInput input, StorefrontMenu store, TenantContext tenant, bool create, CancellationToken ct)
     {
         var name = input.Name?.Trim();
         if (name is null || name.Length is < 1 or > 48 || name.Any(char.IsControl) || input.Position is < 0 or > 999)
             return Results.BadRequest("Informe um nome de até 48 caracteres e uma posição de 0 a 999.");
         try
         {
-            return await store.Save(id, name, input.Position, input.Visible, create, ct)
+            return await store.Save(id, name, input.Position, input.Visible, create, ct, tenant.Id)
                 ? Results.NoContent() : Results.NotFound();
         }
         catch (PostgresException e) when (e.SqlState == PostgresErrorCodes.UniqueViolation)

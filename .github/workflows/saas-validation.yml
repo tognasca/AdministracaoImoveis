@@ -1,0 +1,116 @@
+name: SaaS branch validation
+on:
+  push:
+    branches: [feature/importacao-inteligente-2-0]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - '.github/workflows/saas-validation.yml'
+permissions:
+  contents: read
+jobs:
+  build-and-static-guard:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: imoveis
+          POSTGRES_PASSWORD: imoveis_ci_password
+          POSTGRES_DB: imoveis_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U imoveis -d imoveis_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Compile ASP.NET Core
+        run: dotnet build src/Imoveis.Web/Imoveis.Web.csproj --configuration Release
+      - name: Validate SaaS structural prerequisites
+        run: node scripts/check-saas-readiness.mjs
+      - name: Verify PDF and Excel parsers
+        run: |
+          node scripts/verificar-importacao-2.mjs
+          node scripts/verificar-pdf-cabecalhos.mjs
+          node scripts/verificar-pdf-excel.mjs
+      - name: Prepare the disposable database at the previous schema version
+        run: |
+          node scripts/preparar-migracao-legada.mjs | docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U imoveis -d imoveis_ci
+      - name: Boot API and apply pending database migrations
+        env:
+          Admin__Password: ci_admin_password_long_enough_2026
+          ConnectionStrings__Imoveis: Host=localhost;Port=5432;Database=imoveis_ci;Username=imoveis;Password=imoveis_ci_password
+          ASPNETCORE_URLS: http://127.0.0.1:5099
+          ASPNETCORE_ENVIRONMENT: Development
+          Saas__LegacyHostnames: imoveis-ci.test
+          Media__Path: /tmp/imoveis-ci-media
+        run: |
+          dotnet run --no-build --configuration Release --project src/Imoveis.Web/Imoveis.Web.csproj > /tmp/imoveis-ci.log 2>&1 &
+          echo $! > /tmp/imoveis-ci.pid
+          for i in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:5099/health; then exit 0; fi
+            if ! kill -0 "$(cat /tmp/imoveis-ci.pid)" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          cat /tmp/imoveis-ci.log
+          exit 1
+      - name: Seed inaccessible records from a second tenant
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U imoveis -d imoveis_ci < scripts/fixtures-saas-isolation.sql
+      - name: Verify API regressions on the disposable database
+        env:
+          IMOVEIS_URL: http://127.0.0.1:5099
+          IMOVEIS_EXPECT_LEGACY_FIXTURE: '1'
+          IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026
+        run: node scripts/verificar-integracao.mjs
+      - name: Show API logs on failure
+        if: failure()
+        run: cat /tmp/imoveis-ci.log
+      - name: Verify CRM on desktop, tablet and smartphone viewports
+        env:
+          IMOVEIS_URL: http://127.0.0.1:5099
+          IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026
+        run: |
+          npm install --prefix "$RUNNER_TEMP/imoveis-browser" playwright@1.62.1
+          "$RUNNER_TEMP/imoveis-browser/node_modules/.bin/playwright" install --with-deps chromium
+          NODE_PATH="$RUNNER_TEMP/imoveis-browser/node_modules" node scripts/verificar-crm-navegador.cjs
+      - name: Verify multi-tenant isolation and publishable storefront package
+        env:
+          Admin__Password: ci_admin_password_long_enough_2026
+          ConnectionStrings__Imoveis: Host=localhost;Port=5432;Database=imoveis_ci;Username=imoveis;Password=imoveis_ci_password
+          ASPNETCORE_URLS: http://127.0.0.1:5100
+          ASPNETCORE_ENVIRONMENT: Development
+          Saas__EnableMultiTenant: 'true'
+          Saas__PublicCatalogBaseUrl: http://127.0.0.1:5100
+          Saas__PlatformAdminKey: ci_platform_key_for_disposable_database_only
+          IMOVEIS_PLATFORM_KEY: ci_platform_key_for_disposable_database_only
+          Media__Path: /tmp/imoveis-ci-media
+          IMOVEIS_URL: http://127.0.0.1:5100
+          IMOVEIS_ADMIN_PASSWORD: ci_admin_password_long_enough_2026
+        run: |
+          docker exec -i "${{ job.services.postgres.id }}" psql -v ON_ERROR_STOP=1 -U imoveis -d imoveis_ci < scripts/fixtures-saas-domains.sql
+          dotnet run --no-build --configuration Release --project src/Imoveis.Web/Imoveis.Web.csproj > /tmp/imoveis-multi-ci.log 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do
+            if curl --fail --silent -H 'Host: imoveis-ci.test' http://127.0.0.1:5100/health; then
+              export IMOVEIS_EXTERNAL_ZIP="$RUNNER_TEMP/imoveis-vitrine.zip"
+              node scripts/verificar-multiempresa.mjs
+              NODE_PATH="$RUNNER_TEMP/imoveis-browser/node_modules" node scripts/verificar-vitrine-externa.cjs
+              exit 0
+            fi
+            if ! kill -0 "$app_pid" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          exit 1
+      - name: Show multi-tenant API logs on failure
+        if: failure()
+        run: cat /tmp/imoveis-multi-ci.log || true
