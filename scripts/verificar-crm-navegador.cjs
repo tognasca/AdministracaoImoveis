@@ -32,6 +32,19 @@ const {chromium} = require('playwright');
       assert(await lead.getByRole('button',{name:'Salvar'}).isVisible());
       console.log('Chromium: CRM utilizável em '+width+' px.');
     }
+    await page.goto(new URL('/#configuracoes',base).href);
+    const theme = page.locator('#template-form select[name=template]');
+    await theme.selectOption('boutique');
+    await page.locator('#preview-width').selectOption('390');
+    const frame = page.frameLocator('#storefront-preview');
+    await frame.locator('body[data-estate-template=boutique]').waitFor();
+    await page.getByRole('button',{name:'Salvar rascunho',exact:true}).click();
+    await page.getByText('Rascunho do modelo salvo.',{exact:true}).waitFor();
+    assert.equal(await theme.inputValue(),'boutique');
+    await page.getByRole('button',{name:'Menu',exact:true}).click();
+    await page.getByRole('button',{name:'Tema escuro',exact:true}).click();
+    assert(await page.locator('body.workspace-dark').count());
+    console.log('Chromium: prévia real da vitrine, rascunho e tema escuro do painel.');
   } finally {
     await browser.close();
   }

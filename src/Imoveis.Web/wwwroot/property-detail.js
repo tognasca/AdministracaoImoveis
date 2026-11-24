@@ -84,17 +84,50 @@ export function propertyDetail(home, settings, locationText) {
     '<header class="property-heading"><div>' +
     (d.kind ? '<p class="estate-kicker">' + escape(d.kind) + '</p>' : '') + '<h1>' + escape(d.title) + '</h1>' +
     (locationText ? '<p class="property-location">' + locationText + '</p>' : '') + '</div>' +
-    '<span class="property-reference">Ref. ' + escape(d.code) + '</span></header>' +
+    '<div><span class="property-reference">Ref. ' + escape(d.code) + '</span><div class="row property-tools">' +
+    '<button type="button" class="alt" id="property-favorite" aria-pressed="false">Favoritar</button>'+
+    '<button type="button" class="alt" id="property-share">Compartilhar</button></div>'+
+    '<small role="status" id="property-action-status"></small></div></header>' +
     '<div class="property-layout"><section class="property-gallery" aria-label="Fotos do imóvel">' + gallery(home) + '</section>' +
     '<aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price"><p>Valor do imóvel</p>' +
     '<strong>' + money(d.price) + '</strong></div>' +
     contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside>' +
     (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
-    '</div></div>';
+    '</div></div>' + (contact ? '<div class="property-mobile-contact"><strong>'+money(d.price)+'</strong>'+
+      '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Enviar interesse</a></div>' : '');
   bindGallery(home);
+  const favorite = app.querySelector('#property-favorite');
+  const key = 'estate-favorite:'+home.id;
+  const status = app.querySelector('#property-action-status');
+  const setFavorite = active => {
+    favorite.setAttribute('aria-pressed',String(active));
+    favorite.textContent = active ? 'Favoritado' : 'Favoritar';
+  };
+  try { setFavorite(localStorage.getItem(key) === '1'); } catch { favorite.disabled = true; }
+  favorite.onclick = () => {
+    const active = favorite.getAttribute('aria-pressed') !== 'true';
+    try {
+      if (active) localStorage.setItem(key,'1');
+      else localStorage.removeItem(key);
+      setFavorite(active);
+    } catch { status.textContent = 'Não foi possível salvar o favorito neste dispositivo.'; }
+  };
+  app.querySelector('#property-share').onclick = async () => {
+    try {
+      if (navigator.share) await navigator.share({title:d.title,url:location.href});
+      else { await navigator.clipboard.writeText(location.href); status.textContent = 'Link copiado.'; }
+    } catch (error) {
+      if (error.name !== 'AbortError') status.textContent = 'Copie o endereço da página para compartilhar.';
+    }
+  };
   if (!contact) return;
   const form = app.querySelector('#property-contact-form');
+  app.querySelector('#property-contact-shortcut').onclick = event => {
+    event.preventDefault();
+    form.scrollIntoView({block:'center'});
+    form.elements.contactName.focus({preventScroll:true});
+  };
   form.oninput = event => event.target.setCustomValidity('');
   form.onsubmit = event => {
     event.preventDefault();

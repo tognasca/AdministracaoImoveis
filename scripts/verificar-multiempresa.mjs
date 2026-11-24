@@ -61,8 +61,13 @@ await call(second,admin+'/login',204,'POST',{username:'admin',password});
 
 const input = {code:'REPETIDO',source:'Integração multiempresa',title:'Casa comercial',kind:'Casa',
   district:'Centro',city:'Cotia',price:350000,bedrooms:2,size:90,status:'Publicado',version:0};
+const dashboard = admin+'/painel/resumo';
+const firstOverview = await call(first,dashboard,200);
+const secondOverview = await call(second,dashboard,200);
 const {id: firstId} = await call(first,property,201,'POST',input);
 const {id: secondId} = await call(second,property,201,'POST',input);
+assert.equal((await call(first,dashboard,200)).total,firstOverview.total+1);
+assert.equal((await call(second,dashboard,200)).total,secondOverview.total+1);
 const own = await call(first,property+'/'+firstId,200);
 await call(second,property+'/'+firstId,404);
 await call(second,'/api/imoveis/'+firstId,404);
@@ -85,6 +90,13 @@ await call(first,'/media/'+firstId+'/'+photo,200);
 await call(second,'/media/'+firstId+'/'+photo,404);
 await call(second,property+'/'+firstId+'/fotos/'+photo,404,'DELETE');
 await call(second,property+'/'+firstId+'/fotos/'+photo+'/capa',404,'PUT');
+
+await call(first,property+'/'+firstId+'/fotos',201,'POST',upload,multipart);
+const {photos: order} = await call(first,property+'/'+firstId,200);
+await call(second,property+'/'+firstId+'/fotos/ordem',404,'PUT',order);
+await call(first,property+'/'+firstId+'/fotos/ordem',409,'PUT',[order[0],secondId]);
+await call(first,property+'/'+firstId+'/fotos/ordem',204,'PUT',[...order].reverse());
+assert.deepEqual((await call(first,property+'/'+firstId,200)).photos,[...order].reverse());
 
 const keyPath = admin+'/integracoes/catalogo/chave';
 const catalogApi = '/api/v1/catalogo/imoveis';
@@ -151,6 +163,18 @@ assert.equal(config.name,'Imobiliária B');
 assert.equal(config.whatsapp,'5511999990002');
 assert.deepEqual(config.menu,[]);
 assert.equal((await call(second,'/api/vitrine/tema',200)).template,'modern');
+
+const theme = admin+'/vitrine/tema';
+await call(first,theme+'/rascunho',204,'PUT',{template:'boutique',accentColor:'#42A083'});
+const themeEditor = await call(first,theme+'/editor',200);
+assert.equal(themeEditor.draft.template,'boutique');
+assert.equal(themeEditor.published.template,'premium');
+assert.equal((await call(second,theme+'/editor',200)).draft,null);
+assert.equal((await call(first,'/api/vitrine/tema',200)).template,'premium');
+await call(first,theme,204,'PUT',{template:'minimal',accentColor:'#234567'});
+assert.equal((await call(first,'/api/vitrine/tema',200)).template,'minimal');
+await call(first,theme+'/restaurar',204,'POST');
+assert.equal((await call(first,'/api/vitrine/tema',200)).template,'premium');
 
 const signature = '/modelos/'+'b'.repeat(64);
 assert.deepEqual(await call(first,importPath+signature,200),[]);

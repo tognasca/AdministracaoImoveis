@@ -58,3 +58,17 @@
 .property-contact-form .estate-contact { border: 0; padding: 0; margin: 2px 0 0; }
 .property-contact-form .estate-contact .btn { justify-content: center; text-align: center; }
 .property-contact-hint { color: #526257; font-size: .77rem; margin: 0; }
+
+.property-mobile-contact { display:none; }
+.property-tools button[aria-pressed="true"] { border-color:currentColor; }
+@media(max-width:620px) {
+  .estate-site main:has(.property-mobile-contact) { padding-bottom:112px; }
+  .property-mobile-contact {
+    position:fixed; inset:auto 0 0; z-index:6; display:flex; justify-content:space-between;
+    align-items:center; gap:12px; padding:10px 16px max(10px,env(safe-area-inset-bottom)); color:#182432;
+    background:#fff; border-top:1px solid #dedede;
+  }
+  .property-mobile-contact .btn { min-height:44px; }
+}
+.property-similar { margin-top:clamp(28px,5vw,58px); }
+.property-similar h2 { font-size:clamp(1.75rem,3vw,2.6rem); margin-bottom:20px; }

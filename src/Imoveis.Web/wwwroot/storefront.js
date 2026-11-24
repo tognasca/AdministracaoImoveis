@@ -35,19 +35,34 @@ function listingCard(home) {
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }
 
+let previewTheme;
+let currentSettings;
+window.addEventListener('message', event => {
+  if (window.parent === window || event.source !== window.parent || event.origin !== location.origin ||
+      new URLSearchParams(location.search).get('preview') !== 'theme' || event.data?.type !== 'storefront-theme') return;
+  previewTheme = event.data.theme;
+  applyTheme(previewTheme);
+  if (currentSettings) applyBrandColors(currentSettings);
+});
+
 function applyTheme(theme) {
-  const selected = ['modern','premium','commercial'].includes(theme?.template) ? theme.template : 'modern';
+  theme = previewTheme ?? theme;
+  const selected = ['modern','premium','commercial','minimal','boutique'].includes(theme?.template) ? theme.template : 'modern';
   document.body.dataset.estateTemplate = selected;
   document.body.dataset.estateAccent = /^#[0-9a-fA-F]{6}$/.test(theme?.accentColor ?? '') ? theme.accentColor : '';
   if (document.body.dataset.estateAccent)
     document.body.style.setProperty('--estate-accent',document.body.dataset.estateAccent);
 }
-function showBrand(settings) {
-  const theme = storefrontTheme(settings);
-  if (!/^#[0-9a-fA-F]{6}$/.test(document.body.dataset.estateAccent ?? ''))
-    document.body.style.setProperty('--estate-accent', theme.background);
+function applyBrandColors(settings) {
+  const accent = document.body.dataset.estateAccent;
+  const theme = storefrontTheme({...settings,color:accent || settings.color});
+  document.body.style.setProperty('--estate-accent',theme.background);
   document.body.style.setProperty('--estate-on-accent', theme.foreground);
   document.body.style.setProperty('--estate-accent-shade', theme.shade);
+}
+function showBrand(settings) {
+  currentSettings = settings;
+  applyBrandColors(settings);
   const name = settings.name || 'Imóveis Cotia';
   document.title = name;
   const brandMarkup = (settings.logo ? '<img class="site-logo" src="' + escape(catalogMedia(settings.logo)) + '" alt="">' : '') +
@@ -143,4 +158,10 @@ export async function details(id, isCurrent) {
   showBrand(settings);
   showMenu(settings);
   propertyDetail(home, settings, locationLabel(home.data));
+  if (!home.data.kind) return;
+  const similar = await catalogRequest('/api/imoveis?' + new URLSearchParams({kind:home.data.kind})).catch(() => []);
+  if (!isCurrent()) return;
+  const others = similar.filter(item => item.id !== home.id).slice(0,4);
+  if (others.length) app.querySelector('.property-page').insertAdjacentHTML('beforeend',
+    '<section class="property-similar"><h2>Imóveis semelhantes</h2><div class="estate-grid">'+others.map(listingCard).join('')+'</div></section>');
 }

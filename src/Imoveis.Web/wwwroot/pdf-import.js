@@ -87,15 +87,16 @@ export function mountPdfImport(isCurrent) {
   function edit() {
     const previousGrid = app.querySelector('.pdf-grid');
     const scrollPosition = {top:previousGrid?.scrollTop ?? 0,left:previousGrid?.scrollLeft ?? 0};
-    const body = rows.map((row,index) => '<tr data-row="'+index+'"><td><input type="checkbox" data-field="selected" ' +
+    const body = rows.map((row,index) => '<tr data-row="'+index+'"><td data-label="Incluir"><input type="checkbox" data-field="selected" ' +
       (row.selected ? 'checked ' : '') + 'aria-label="Incluir registro '+(index+1)+'"></td><td><button type="button" class="pdf-delete" title="Excluir linha" data-delete-row aria-label="Excluir registro '+(index+1)+'"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button></td><td class="pdf-row-review"></td><td>' +
       (row.page ? '<details><summary>Pág. '+row.page+'</summary><pre>'+escape(row.text)+'</pre></details>' : 'Manual') + '</td>' +
       columns.map(([key,label,limit]) => {
         const attributes = ' data-field="'+key+'" maxlength="'+limit+'" aria-label="'+label+' do registro '+(index+1)+'"';
         const value = escape(row.data[key]);
-        if (key === 'zone') return '<td>'+zoneSelect(row.data.zone,attributes)+'</td>';
-        return key === 'notes' ? '<td><textarea rows="2"'+attributes+'>'+value+'</textarea></td>' :
-          '<td><input'+attributes+' value="'+value+'"></td>';
+        const cell = '<td data-label="'+label+'">';
+        if (key === 'zone') return cell+zoneSelect(row.data.zone,attributes)+'</td>';
+        return key === 'notes' ? cell+'<textarea rows="2"'+attributes+'>'+value+'</textarea></td>' :
+          cell+'<input'+attributes+' value="'+value+'"></td>';
       }).join('') + '</tr>').join('');
     shell('<form id="pdf-review"><section class="box"><h3>'+escape(file.name)+'</h3>' +
       '<label>Origem dos códigos<input name="source" required maxlength="100" value="'+escape(source)+'"></label>' +
@@ -105,16 +106,29 @@ export function mountPdfImport(isCurrent) {
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
       '<section class="box"><h3>Corrigir no Excel</h3><div class="row"><button type="button" class="alt" id="pdf-export">Exportar para Excel</button><label>Carregar Excel corrigido<input id="pdf-corrected" type="file" accept=".xlsx"></label></div><p class="muted">Edite a aba Imóveis e salve como .xlsx. Ao carregar, a planilha substitui esta grade. A gravação acontece somente após a conferência.</p></section>' +
       '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Quando o PDF não informa a cidade, usamos São Paulo; você pode alterar. Pendências de publicação não impedem salvar como rascunho.</p>' +
-      '<div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
+      '<div class="pdf-review-split"><div class="pdf-document" hidden></div><div class="pdf-review-rows"><div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
       (body || '<tr><td colspan="15">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
-      '</tbody></table></div><div class="row"><button type="button" class="alt" id="pdf-back">Trocar PDF</button>' +
+      '</tbody></table></div></div></div><div class="row"><button type="button" class="alt" id="pdf-back">Trocar PDF</button>' +
       '<button type="button" class="alt" id="pdf-add">Adicionar linha</button><button id="pdf-check">Conferir antes de importar</button></div></form>' +
       '<details class="box pdf-information"><summary>Trechos informativos ('+information.length+')</summary>' +
       (information.length ? information.map((item,index)=>'<div class="pdf-fragment"><p class="muted">Página '+item.page+'</p><pre>'+
         escape(item.text)+'</pre><button type="button" class="alt" data-promote="'+index+'">Usar na grade</button></div>').join('') :
         '<p>Nenhum trecho separado.</p>') + '</details>');
     const form = app.querySelector('#pdf-review');
+    const documentPanel = form.querySelector('.pdf-document');
+    if (/\.pdf$/i.test(file.name)) {
+      const url = URL.createObjectURL(new Blob([file],{type:'application/pdf'}));
+      documentPanel.hidden = false;
+      documentPanel.innerHTML = '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="'+url+'">Abrir PDF original</a>'+
+        '<iframe title="PDF original" loading="lazy" src="'+url+'"></iframe>';
+      const cleanup = new MutationObserver(() => {
+        if (documentPanel.isConnected) return;
+        cleanup.disconnect();
+        URL.revokeObjectURL(url);
+      });
+      cleanup.observe(app,{childList:true});
+    }
     app.querySelector('#pdf-corrected').onchange = event => loadCorrections(event.target.files[0]);
     app.querySelector('#pdf-export').onclick = async () => {
       if (busy) return;

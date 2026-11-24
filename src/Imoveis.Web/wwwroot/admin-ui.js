@@ -10,15 +10,75 @@ export function adminNav() {
   const current = route === 'editar' && id ? 'admin' :
     route === 'importar' || (!route && path === '/admin/importacoes') ? '/admin/importacoes' :
     route || 'admin';
-  const item = (label, target) => {
-    const selected = current === target;
-    const anchor = link(label, target, !selected);
-    return selected ? anchor.replace('<a ', '<a aria-current="page" ') : anchor;
+  const item = ([label, target, icon]) => {
+    const href = target.startsWith('/') ? target : '/#' + target;
+    return '<a class="workspace-link" href="' + href + '"' + (current === target ? ' aria-current="page"' : '') +
+      '><span class="workspace-icon" aria-hidden="true">' + icon + '</span><span>' + label + '</span></a>';
   };
-  return '<nav class="admin-nav" aria-label="Painel administrativo">' + item('Meus imóveis', 'admin') + item('CRM', 'crm') + item('Novo imóvel', 'editar') + item('Importações', '/admin/importacoes') + item('Tratar PDF', 'pdf') + (session?.administrator ? item('Usuários', 'usuarios') + item('Configurações', 'configuracoes') + item('Menu da vitrine', 'menu') : '') +
-    '<button class="alt" id="logout">Sair</button></nav>';
+  const operations = [
+    ['Meus imóveis','admin','⌂'], ['CRM','crm','◎'], ['Novo imóvel','editar','+'],
+    ['Importações','/admin/importacoes','⇧'], ['Tratar PDF','pdf','▤']
+  ];
+  const management = [
+    ['Usuários','usuarios','♙'], ['Configurações','configuracoes','⚙'], ['Menu da vitrine','menu','≡']
+  ];
+  return '<aside class="workspace-sidebar"><div class="workspace-top"><a href="/#admin" class="workspace-brand"><span aria-hidden="true">A</span> AdministraçãoImóveis</a>' +
+    '<button class="alt" id="workspace-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="false">Menu</button></div>' +
+    '<nav id="workspace-navigation" aria-label="Painel administrativo"><p>Operação</p>' + operations.map(item).join('') +
+    (session?.administrator ? '<p>Administração</p>' + management.map(item).join('') : '') +
+    '<div class="workspace-utilities"><a class="workspace-link" href="/#vitrine">Abrir vitrine ↗</a>' +
+    '<button type="button" class="alt" id="workspace-theme" aria-pressed="false">Tema escuro</button>' +
+    '<button type="button" class="alt" id="logout">Sair</button></div></nav></aside>' +
+    '<nav class="workspace-dock" aria-label="Atalhos do painel">' + operations.slice(0,4).map(item).join('') + '</nav>';
 }
+
 export function bindLogout() {
+  const toggle = document.querySelector('#workspace-toggle');
+  const nav = document.querySelector('#workspace-navigation');
+  const compact = matchMedia('(max-width: 1050px)');
+  const preference = (key, value) => {
+    try {
+      if (value !== undefined) localStorage.setItem(key,value);
+      return localStorage.getItem(key);
+    } catch { return null; }
+  };
+  const setExpanded = expanded => {
+    toggle.setAttribute('aria-expanded',String(expanded));
+    document.body.classList.toggle('workspace-menu-open',compact.matches && expanded);
+    document.body.classList.toggle('workspace-sidebar-collapsed',!compact.matches && !expanded);
+    nav.inert = !expanded;
+    toggle.textContent = expanded ? 'Fechar menu' : 'Menu';
+  };
+  setExpanded(!compact.matches && preference('workspace-sidebar') !== 'closed');
+  toggle.onclick = () => {
+    const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+    if (!compact.matches) preference('workspace-sidebar',expanded ? 'open' : 'closed');
+    setExpanded(expanded);
+  };
+  toggle.closest('aside').onkeydown = event => {
+    if (event.key === 'Escape' && compact.matches) { setExpanded(false); toggle.focus(); }
+  };
+  const theme = document.querySelector('#workspace-theme');
+  const setTheme = dark => {
+    document.body.classList.toggle('workspace-dark',dark);
+    theme.setAttribute('aria-pressed',String(dark));
+    theme.textContent = dark ? 'Tema claro' : 'Tema escuro';
+  };
+  setTheme(preference('workspace-theme') === 'dark');
+  theme.onclick = () => {
+    const dark = theme.getAttribute('aria-pressed') !== 'true';
+    preference('workspace-theme',dark ? 'dark' : 'light');
+    setTheme(dark);
+  };
+  const resize = () => {
+    if (!toggle.isConnected) { window.removeEventListener('resize',resize); return; }
+    if (compact.matches !== wasCompact) {
+      wasCompact = compact.matches;
+      setExpanded(!wasCompact && preference('workspace-sidebar') !== 'closed');
+    }
+  };
+  let wasCompact = compact.matches;
+  window.addEventListener('resize',resize);
   document.querySelector('#logout').onclick = async () => {
     try { await request('/api/admin/logout', 'POST'); location.href = '/#vitrine'; }
     catch (error) { report(error.message); }
