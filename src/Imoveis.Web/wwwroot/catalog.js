@@ -6,20 +6,22 @@ export async function adminListing(params, isCurrent) {
   const q = params.get('q') ?? '';
   const page = Math.max(1, Number(params.get('page')) || 1);
   const query = next => new URLSearchParams({q,page:next});
-  const data = await request(root + '?' + query(page));
+  const [data, summary] = await Promise.all([
+    request(root + '?' + query(page)),
+    request('/api/admin/painel/resumo').catch(() => null)
+  ]);
   if (!isCurrent()) return;
-  const published = data.filter(home => home.data.status === 'Publicado').length;
-  const drafts = data.filter(home => home.data.status === 'Rascunho').length;
-  const withoutPhotos = data.filter(home => !home.photos.length).length;
-  app.innerHTML = adminNav() + '<div class="premium-heading"><div><p class="premium-eyebrow">PAINEL IMOBILIÁRIO</p><h2>Gestão de imóveis</h2><p class="muted">Acompanhe, cadastre e publique em menos etapas.</p></div><div class="premium-actions">' +
-    link('Novo imóvel', 'editar') + link('Importar arquivos', '/admin/importacoes') + link('Tratar PDF', 'pdf') +
-    '</div></div><section class="premium-stats" aria-label="Resumo da página atual">' +
-    '<div class="premium-stat"><span>Imóveis nesta página</span><strong>' + data.length + '</strong></div>' +
-    '<div class="premium-stat"><span>Publicados</span><strong>' + published + '</strong></div>' +
-    '<div class="premium-stat"><span>Rascunhos</span><strong>' + drafts + '</strong></div>' +
-    '<div class="premium-stat"><span>Sem fotografias</span><strong>' + withoutPhotos + '</strong></div></section>' +
-    '<section class="box premium-import"><h3>Importação inteligente</h3><p>Importe planilhas e catálogos, revise os imóveis e confirme antes de salvar.</p>' +
-    link('Importar arquivo', '/admin/importacoes') + '</section>' +
+  const metrics = summary ? [
+    ['Total de imóveis',summary.total], ['Na vitrine',summary.published], ['Vendidos',summary.sold], ['Rascunhos',summary.drafts],
+    ['Leads recebidos',summary.leads], ['Etapa de visita',summary.visits], ['Propostas',summary.proposals],
+    ['Conversão de leads',summary.leads ? new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(summary.won/summary.leads) : '—']
+  ] : [];
+  app.innerHTML = adminNav() + '<div class="premium-heading"><div><h2>Gestão de imóveis</h2></div><div class="premium-actions">' +
+    link('Novo imóvel', 'editar') + link('Importar arquivos', '/admin/importacoes', true) +
+    '</div></div><section class="premium-stats" aria-label="Resumo da imobiliária">' +
+    (summary ? metrics.map(([label,value]) => '<div class="premium-stat"><span>' + label + '</span><strong>' +
+       (typeof value === 'number' ? value.toLocaleString('pt-BR') : value) + '</strong></div>').join('') :
+      '<p role="status">O resumo da imobiliária está indisponível.</p>') + '</section>' +
     notice + (getSession()?.administrator ? '<div class="row"><button class="alt" id="publish-drafts">Publicar rascunhos completos</button>' +
       '<span class="muted">Rascunhos com cidade, tipo e preço podem ir para a vitrine.</span></div>' : '') + '<form class="box filter-bar" id="search"><label>Cidade, bairro, título ou código<input name="q" maxlength="120" value="' +
     escape(q) + '"></label>' +
@@ -33,7 +35,15 @@ export async function adminListing(params, isCurrent) {
       '</article>').join('') ||
       '<p>' + (q ? 'Nenhum imóvel corresponde à busca.' : 'Nenhum imóvel cadastrado.') + '</p>') +
     '</div><div class="row">' + (page > 1 ? link('Página anterior', 'admin?' + query(page-1), true) : '') +
-    (data.length === 30 ? link('Próxima página', 'admin?' + query(page+1), true) : '') + '</div>';
+    (data.length === 30 ? link('Próxima página', 'admin?' + query(page+1), true) : '') + '</div>' +
+    (summary ? '<div class="grid dashboard-activity"><section class="box"><h3>Atividade recente</h3>' +
+      (summary.activities.length ? '<ul>'+summary.activities.map(activity => '<li><a href="/#'+
+        (activity.kind === 'imovel' ? 'editar/'+escape(activity.id) : 'crm')+'">'+escape(activity.label)+'</a><small>'+
+        escape(new Date(activity.at).toLocaleString('pt-BR'))+'</small></li>').join('')+'</ul>' : '<p>Nenhuma atividade registrada.</p>')+
+      '</section><section class="box"><h3>Atendimento por corretor</h3>'+
+      (summary.staff.length ? '<ul>'+summary.staff.map(user => '<li><strong>'+escape(user.username)+'</strong><small>'+
+        user.assigned+' contato(s) · '+user.won+' fechado(s)</small></li>').join('')+'</ul>' :
+        '<p>Vincule um corretor aos contatos no CRM para acompanhar os atendimentos.</p>')+'</section></div>' : '');
   document.querySelector('#search').onsubmit = event => {
     event.preventDefault();
     location.hash = 'admin?' + new URLSearchParams([...new FormData(event.target)].filter(([,value]) => value));

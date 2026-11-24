@@ -34,17 +34,31 @@ export async function crm(isCurrent) {
     '<label>Etapa<select name="status">'+stageOptions('new')+'</select></label></div>' +
     links()+'<label>Observações<textarea name="notes" maxlength="4000"></textarea></label>' +
     '<button>Adicionar contato</button></form></section>' +
-    '<section class="box"><h3>Contatos ('+leads.length+')</h3>' +
-    (leads.length ? '<div class="crm-list">'+leads.map(lead =>
-      '<form class="crm-lead" data-id="'+escape(lead.id)+'"><div><strong>'+escape(lead.name)+'</strong>' +
+    '<section class="crm-pipeline"><h3>Contatos ('+leads.length+')</h3>' +
+    '<label class="crm-filter">Filtrar por corretor<select id="crm-assignee"><option value="all">Todos</option>'+options()+'</select></label>' +
+    '<div class="crm-board">'+stages.map(([stage,label]) => '<section class="box crm-stage" data-stage="'+stage+'">' +
+      '<h4>'+label+' <span class="chips"></span></h4><p class="muted crm-stage-empty">Nenhum contato nesta etapa.</p>' +
+      leads.filter(lead => lead.status === stage).map(lead =>
+      '<form class="crm-lead" data-assignee="'+escape(lead.assignedTo)+'" data-id="'+escape(lead.id)+'"><div><strong>'+escape(lead.name)+'</strong>' +
       (lead.email?'<p>'+escape(lead.email)+'</p>':'') +
       (lead.phone?'<p>'+escape(lead.phone)+'</p>':'') +
       '</div><label>Etapa<select name="status">'+stageOptions(lead.status)+'</select></label>' +
       links(lead)+'<label>Observações<textarea name="notes" maxlength="4000" rows="2">'+escape(lead.notes)+'</textarea></label>' +
       '<div><button class="alt">Salvar</button>' +
-      '<details class="lead-history"><summary>Histórico de etapas</summary><ol></ol></details></div></form>').join('')+'</div>' :
-      '<p>Nenhum contato cadastrado.</p>')+'</section>';
+      '<details class="lead-history"><summary>Histórico de etapas</summary><ol></ol></details></div></form>').join('')+'</section>').join('')+'</div></section>';
   bindLogout();
+  const assignee = app.querySelector('#crm-assignee');
+  const cards = [...app.querySelectorAll('.crm-lead')];
+  function refreshBoard() {
+    for (const card of cards) card.hidden = assignee.value !== 'all' && card.dataset.assignee !== assignee.value;
+    for (const column of app.querySelectorAll('.crm-stage')) {
+      const visible = column.querySelectorAll('.crm-lead:not([hidden])').length;
+      column.querySelector('.chips').textContent = visible;
+      column.querySelector('.crm-stage-empty').hidden = visible > 0;
+    }
+  }
+  assignee.onchange = refreshBoard;
+  refreshBoard();
   for (const button of app.querySelectorAll('.crm-property-find')) {
     const form = button.form;
     const search = form.querySelector('.crm-property-search');
@@ -108,6 +122,10 @@ export async function crm(isCurrent) {
           name:lead.name,email:lead.email,phone:lead.phone,...formData(form)
         });
         if(isCurrent()) {
+          form.dataset.assignee = form.elements.assignedTo.value;
+          const column = [...app.querySelectorAll('.crm-stage')].find(stage => stage.dataset.stage === form.elements.status.value);
+          if (column && form.parentNode !== column) column.append(form);
+          refreshBoard();
           report('Contato atualizado.');
           await loadHistory();
         }

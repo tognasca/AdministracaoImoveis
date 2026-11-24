@@ -22,15 +22,19 @@ function imageForm({key,title,label}, url) {
 export async function showSettings(isCurrent) {
   const allowed = getSession()?.administrator;
   const settings = allowed ? await request('/api/vitrine/configuracao') : null;
-  const selectedTheme = allowed ? await request('/api/vitrine/tema') : null;
+  const themes = allowed ? await request(endpoint + 'tema/editor') : null;
+  const selectedTheme = themes?.draft ?? themes?.published;
   const external = allowed ? await request(endpoint + 'publicacao-externa') : null;
   if (!isCurrent()) return;
 
   app.innerHTML = adminNav() + '<h2>Configurações da vitrine</h2>' + notice +
-    (allowed ? '<section class="box"><h3>Modelo visual da imobiliária</h3><p class="muted">Escolha uma apresentação para a vitrine. O cadastro e os imóveis permanecem inalterados.</p><form id="template-form"><label>Modelo<select name="template">' +
-      [['modern','Moderno'],['premium','Premium'],['commercial','Comercial']].map(([value,label]) =>
+    (allowed ? '<section class="box"><h3>Modelo visual da imobiliária</h3><p class="muted">Pré-visualize os imóveis publicados no modelo escolhido.</p><form id="template-form"><label>Modelo<select name="template">' +
+      [['premium','Luxury'],['minimal','Minimalista'],['modern','Moderno'],['commercial','Corporativo'],['boutique','Boutique']].map(([value,label]) =>
         '<option value="' + value + '"' + (value === selectedTheme.template ? ' selected' : '') + '>' + label + '</option>').join('') +
-      '</select></label><label>Cor principal<input name="accentColor" type="color" value="' + escape(selectedTheme.accentColor) + '"></label><div class="row"><button>Aplicar modelo</button></div></form></section>' +
+      '</select></label><label>Cor principal<input name="accentColor" type="color" value="' + escape(selectedTheme.accentColor) + '"></label><div class="row"><button>Publicar modelo</button><button type="button" class="alt" id="theme-draft">Salvar rascunho</button>' +
+      (themes.canRestore ? '<button type="button" class="alt" id="theme-restore">Restaurar anterior</button>' : '') +
+      '</div></form><label>Largura da prévia<select id="preview-width"><option value="1280">Desktop</option><option value="768">Tablet</option><option value="390">Smartphone</option></select></label>' +
+      '<div class="storefront-preview-frame"><iframe id="storefront-preview" title="Prévia da vitrine" loading="lazy" src="/?preview=theme#vitrine"></iframe></div></section>' +
       '<section class="box"><h3>Identidade do site</h3><form id="brand-form">' +
       '<label>Nome do site<input name="siteName" required maxlength="80" value="' + escape(settings.name) + '"></label>' +
       '<label class="theme-color">Cor da vitrine<input name="siteColor" type="color" value="' + escape(settings.color || '#6B5140') + '"></label>' +
@@ -64,12 +68,41 @@ export async function showSettings(isCurrent) {
   }
 
   const templateForm = app.querySelector('#template-form');
+  const readTheme = () => ({
+    template:templateForm.elements.template.value,
+    accentColor:templateForm.elements.accentColor.value
+  });
+  const frame = app.querySelector('#storefront-preview');
+  const size = app.querySelector('#preview-width');
+  const sendPreview = () => frame.contentWindow?.postMessage({type:'storefront-theme',theme:readTheme()},location.origin);
+  frame.onload = sendPreview;
+  templateForm.oninput = sendPreview;
+  const stage = frame.parentElement;
+  const fitPreview = () => {
+    const width = Number(size.value);
+    const scale = Math.min(1,stage.clientWidth / width);
+    if (!scale) return;
+    frame.style.width = width + 'px';
+    frame.style.height = Math.round(440 / scale) + 'px';
+    frame.style.transform = 'translateX(-50%) scale('+scale+')';
+  };
+  const previewResize = new ResizeObserver(() => {
+    if (!stage.isConnected) { previewResize.disconnect(); return; }
+    fitPreview();
+  });
+  previewResize.observe(stage);
+  size.onchange = fitPreview;
+  fitPreview();
   templateForm.onsubmit = event => {
     event.preventDefault();
-    change(() => request(endpoint + 'tema','PUT',{
-      template:templateForm.elements.template.value,
-      accentColor:templateForm.elements.accentColor.value
-    }), 'Modelo visual atualizado.');
+    change(() => request(endpoint + 'tema','PUT',readTheme()), 'Modelo visual publicado.');
+  };
+  app.querySelector('#theme-draft').onclick = () =>
+    change(() => request(endpoint + 'tema/rascunho','PUT',readTheme()), 'Rascunho do modelo salvo.');
+  const restore = app.querySelector('#theme-restore');
+  if (restore) restore.onclick = () => {
+    if (confirm('Restaurar a versão anterior do modelo e da cor principal?'))
+      change(() => request(endpoint + 'tema/restaurar','POST'), 'Modelo anterior restaurado.');
   };
   const brand = app.querySelector('#brand-form');
   const opacityValue = app.querySelector('#opacity-value');

@@ -17,6 +17,7 @@ SaasThemeEndpoints.Map(admin);
 StaticStorefrontPackage.Map(admin);
 SaasAdministrationEndpoints.Map(app);
 LeadEndpoints.Map(admin);
+DashboardEndpoints.Map(admin);
 MenuEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);
 ExportEndpoints.Map(admin);

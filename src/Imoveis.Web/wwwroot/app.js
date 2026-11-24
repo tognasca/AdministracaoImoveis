@@ -25,7 +25,10 @@ async function render() {
   const [route,id] = (path || directRoute || '').split('/');
   const adminRoute = ['admin','editar','importar','pdf','usuarios','configuracoes','menu','crm'].includes(route);
   document.body.classList.toggle('estate-site', !adminRoute);
-  app.innerHTML = '<p>Carregando…</p>';
+  document.body.classList.toggle('workspace',adminRoute);
+  document.body.classList.remove('workspace-menu-open','workspace-sidebar-collapsed');
+  if (adminRoute) document.title = 'Painel · AdministraçãoImóveis';
+  app.innerHTML = '<div class="loading-placeholder" role="status"><span>Carregando…</span><i></i><i></i><i></i></div>';
   window.scrollTo(0, 0);
   try {
     if (adminRoute) {

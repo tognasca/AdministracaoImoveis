@@ -98,7 +98,7 @@ export function mountImport(ui) {
     originalFile = null;
     start(1);
     app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON, XML ou VRSync. No Excel, será usada a primeira aba.</p>'+
-      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml,.vrsync"></label>'+
+      '<label class="import-drop">Arraste o arquivo aqui ou selecione no dispositivo<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml,.vrsync"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
     const exports = '/api/admin/exportacoes/imoveis?limit=5000&format=';
     app.insertAdjacentHTML('beforeend','<section class="box"><h3>Exportar catálogo</h3>'+
@@ -141,11 +141,23 @@ export function mountImport(ui) {
       ).join('') || '<p>Nenhuma falha registrada.</p>');
     }).catch(() => { failures.innerHTML = '<h3>Falhas de processamento</h3><p>Não foi possível consultar o histórico.</p>'; });
     app.querySelector('#example').onclick = () => download('imoveis-exemplo.csv',example);
-    app.querySelector('#import-file').onchange = async event => {
-      const file = event.target.files[0];
-      if (!file) return;
+    const input = app.querySelector('#import-file');
+    const drop = input.closest('.import-drop');
+    drop.ondragover = event => {
+      event.preventDefault();
+      if (!input.disabled) drop.classList.add('is-dragging');
+    };
+    drop.ondragleave = () => drop.classList.remove('is-dragging');
+    drop.ondrop = event => {
+      event.preventDefault();
+      drop.classList.remove('is-dragging');
+      loadFile(event.dataTransfer.files[0]);
+    };
+    input.onchange = () => loadFile(input.files[0]);
+    async function loadFile(file) {
+      if (!file || input.disabled) return;
       try {
-        event.target.disabled = true;
+        input.disabled = true;
         if (file.size > 8e6) throw Error('Selecione um arquivo de até 8 MB.');
         const extension = file.name.split('.').at(-1).toLowerCase();
         skippedListings = 0;
@@ -173,10 +185,10 @@ export function mountImport(ui) {
         if (isCurrent()) map();
       } catch (error) {
         if (isCurrent()) report(error.message);
-        event.target.disabled = false;
-        event.target.value = '';
+        input.disabled = false;
+        input.value = '';
       }
-    };
+    }
   };
   const map = () => {
     start(2);

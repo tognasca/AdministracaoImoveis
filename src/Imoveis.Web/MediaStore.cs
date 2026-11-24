@@ -112,6 +112,24 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
         return true;
     }
 
+    public async Task<int> Reorder(Guid property, Guid[] order, CancellationToken ct, Guid tenantId)
+    {
+        await using var connection = await db.OpenConnectionAsync(ct);
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        if (!await LockProperty(connection, tx, property, ct, tenantId)) return 404;
+        await using var command = new NpgsqlCommand("""
+            UPDATE photos p SET slot=(requested.position-1)::int
+            FROM unnest(@order::uuid[]) WITH ORDINALITY AS requested(id,position)
+            WHERE p.property_id=@property AND p.id=requested.id
+                AND (SELECT count(*) FROM photos WHERE property_id=@property)=cardinality(@order)
+            """, connection, tx);
+        command.Parameters.AddWithValue("property", property);
+        command.Parameters.AddWithValue("order", order);
+        if (await command.ExecuteNonQueryAsync(ct) != order.Length) return 409;
+        await tx.CommitAsync(CancellationToken.None);
+        return 204;
+    }
+
     private static async Task<bool> LockProperty(NpgsqlConnection connection, NpgsqlTransaction tx, Guid property, CancellationToken ct, Guid tenantId)
     {
         await using var command = new NpgsqlCommand("SELECT 1 FROM properties WHERE id=@id AND tenant_id=@tenant FOR UPDATE", connection, tx);
