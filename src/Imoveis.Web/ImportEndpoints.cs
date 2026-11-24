@@ -17,6 +17,7 @@ static class ImportEndpoints
     public static void Map(RouteGroupBuilder admin, Func<PropertyInput, string?> validate)
     {
         var group = admin.MapGroup("/importacoes");
+        group.MapGet("/falhas", ImportFailures.List);
         group.MapGet("/historico", async (NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             await using var query = db.CreateCommand("""
@@ -166,7 +167,7 @@ static class ImportEndpoints
             {
                 return Results.Conflict("Outro cadastro interferiu na importação. Gere a prévia novamente.");
             }
-        });
+        }).TrackImportFailure("Confirmação do lote");
     }
 
     private static bool ValidSource(string? source) => !string.IsNullOrWhiteSpace(source) && source.Length <= 100;

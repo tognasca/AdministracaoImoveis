@@ -8,7 +8,7 @@ static class PdfImageImportEndpoints
     private const int MaxTotalBytes = 12_000_000;
 
     public static void Map(RouteGroupBuilder admin) =>
-        admin.MapPost("/importacoes/pdf/imagens", Extract);
+        admin.MapPost("/importacoes/pdf/imagens", Extract).TrackImportFailure("Extração de imagens do PDF");
 
     private static async Task<IResult> Extract(HttpRequest request, CancellationToken ct)
     {

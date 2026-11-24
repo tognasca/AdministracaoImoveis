@@ -71,7 +71,7 @@ function vrSyncRows(root, skipped) {
     const details = child(listing, 'Details');
     const location = child(listing, 'Location');
     const price = child(details, 'ListPrice');
-    if (!['Sale','Sale/Rent'].includes(value(listing, 'TransactionType')) || price?.getAttribute('currency') !== 'BRL') continue;
+    if (!['For Sale','Sale','Sale/Rent'].includes(value(listing, 'TransactionType')) || price?.getAttribute('currency') !== 'BRL') continue;
     const type = value(details, 'PropertyType');
     rows.push([
       value(listing, 'ListingID'), value(listing, 'Title'), Object.hasOwn(types,type) ? types[type] : type,

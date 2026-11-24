@@ -133,6 +133,13 @@ export function mountImport(ui) {
         (item.hasOriginal ? ' · <a href="'+endpoint+'/historico/'+encodeURIComponent(item.id)+'/arquivo">Baixar original</a>' : '')+'</p>').join('') ||
         '<p>Nenhum arquivo importado.</p>');
     }).catch(() => { history.innerHTML = '<h3>Últimas importações</h3><p>Não foi possível consultar o histórico.</p>'; });
+    app.insertAdjacentHTML('beforeend','<section class="box" id="import-failures"><h3>Falhas de processamento</h3><p>Carregando…</p></section>');
+    const failures = app.querySelector('#import-failures');
+    request(endpoint+'/falhas').then(items => {
+      failures.innerHTML = '<h3>Falhas de processamento</h3>' + (items.map(item =>
+        '<p>'+escape(item.operation)+' · HTTP '+escape(item.status)+' · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+'</p>'
+      ).join('') || '<p>Nenhuma falha registrada.</p>');
+    }).catch(() => { failures.innerHTML = '<h3>Falhas de processamento</h3><p>Não foi possível consultar o histórico.</p>'; });
     app.querySelector('#example').onclick = () => download('imoveis-exemplo.csv',example);
     app.querySelector('#import-file').onchange = async event => {
       const file = event.target.files[0];

@@ -10,7 +10,7 @@ static class PdfImportEndpoints
 
     public static void Map(RouteGroupBuilder admin)
     {
-        admin.MapPost("/importacoes/pdf/extrair", Extract);
+        admin.MapPost("/importacoes/pdf/extrair", Extract).TrackImportFailure("Extração de texto ou OCR");
     }
 
     private static async Task<IResult> Extract(HttpRequest request, CancellationToken cancellationToken)

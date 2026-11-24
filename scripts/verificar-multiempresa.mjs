@@ -157,9 +157,14 @@ assert.deepEqual(await call(first,importPath+signature,200),[]);
 assert.equal((await call(second,importPath+signature,200))[0].source,'Outro tenant');
 await call(first,importPath+'/historico/94001/arquivo',404);
 await call(second,importPath+'/historico/94001/arquivo',200);
+const firstFailures = await call(first,importPath+'/falhas',200);
 await call(second,importPath+'/confirmacao',409,'POST',{
   source:input.source,filename:'outro.csv',rows:[own]
 });
+assert.deepEqual(await call(first,importPath+'/falhas',200),firstFailures);
+const [failure] = await call(second,importPath+'/falhas',200);
+assert.equal(failure.operation,'Confirmação do lote');
+assert.equal(failure.status,409);
 const [matched] = await call(second,importPath+'/conferencia',200,'POST',{source:input.source,codes:[input.code]});
 assert.equal(matched.id,secondId);
 console.log('Isolamento de duas imobiliárias verificado por domínio, sessão, imóveis, fotos, exportação, usuários, CRM, vitrine e importação.');
