@@ -48,6 +48,8 @@ O modo Development permite a autenticação por HTTP no endereço local. A porta
 
 No painel, clique em **Importar arquivo** ou acesse http://localhost:5086/admin/importacoes. Após entrar, escolha XLSX, CSV, TXT, JSON ou XML. O JSON aceita uma lista de objetos ou a chave `properties` da exportação. O XML aceita a estrutura `imoveis/imovel` da exportação. Ambos entram na revisão de mapeamento. Selecione a origem, revise o mapeamento e confirme o lote. Clique em **Salvar mapeamento agora** para gravar a configuração, ou marque a opção de salvar antes de revisar. A lista **Mapeamentos salvos** consulta o banco ao abrir Importações. Ao confirmar um lote, o arquivo original fica no PostgreSQL e pode ser baixado no histórico. A primeira aba do XLSX é usada e a primeira linha contém os cabeçalhos. Arquivos delimitados devem ser UTF-8. Uma coluna vazia preserva o conteúdo do cadastro existente. Novos imóveis entram como rascunho. O sistema preserva a identidade, o álbum, as fotos e o estado de publicação dos imóveis atualizados.
 
+Em **Importar imóveis → Exportar catálogo**, baixe até 5.000 imóveis da imobiliária atual em JSON, CSV, XML ou Excel. O Excel mantém códigos como texto e inclui os dados do catálogo.
+
 O administrador cadastra operadores na tela **Usuários**. Operadores gerenciam imóveis e importações. Apenas administradores gerenciam contas.
 
 No painel, abra **Configurações → Imagem do banner principal** para enviar, substituir ou remover a foto da vitrine. A imagem fica na pasta de mídia, junto com as fotos dos imóveis, e faz parte do mesmo backup.

@@ -1,6 +1,8 @@
 import {normalizeZone, standardZones} from './property-zones.js';
 import {delimited, excel, structuredRows} from './import-files.js';
 
+import {catalogWorkbook} from './pdf-excel.js';
+
 const endpoint = '/api/admin/importacoes';
 const labels = {code:'Código do imóvel',title:'Título',kind:'Tipo de imóvel',bedrooms:'Dormitórios',
   district:'Bairro',city:'Cidade',zone:'Zona',location:'Bairro e cidade',price:'Preço',size:'Área (m²)',notes:'Observações'};
@@ -14,7 +16,10 @@ const codeKey = value => String(value ?? '').trim().toLowerCase();
 const emptyData = {title:'',kind:'',district:'',city:'',price:0,bedrooms:0,size:0,notes:'',status:'Rascunho',version:0};
 const example = 'CODIGO;CTIPO;Dormitórios quanto;Local;VL_VENDA;Título;Observações\r\nIM-104;CASA;03;Granja Viana - Cotia/SP;875000;Casa na Granja Viana;Confirmar disponibilidade antes da visita\r\nIM-105;APTO;02;Centro - Cotia/SP;380000;Apartamento no Centro;Agendar visita com antecedência';
 function download(name, content) {
-  const url = URL.createObjectURL(new Blob(['\ufeff',content], {type:'text/csv;charset=utf-8'}));
+  saveFile(name, new Blob(['\ufeff',content], {type:'text/csv;charset=utf-8'}));
+}
+function saveFile(name, blob) {
+  const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), {href:url,download:name});
   a.click();
   setTimeout(() => URL.revokeObjectURL(url),1000);
@@ -95,6 +100,25 @@ export function mountImport(ui) {
     app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON ou XML. No Excel, será usada a primeira aba.</p>'+
       '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
+    const exports = '/api/admin/exportacoes/imoveis?limit=5000&format=';
+    app.insertAdjacentHTML('beforeend','<section class="box"><h3>Exportar catálogo</h3>'+
+      '<p>Até 5.000 imóveis por arquivo.</p><div class="row">'+
+      ['json','csv','xml'].map(format => '<a download="imoveis.'+format+'" href="'+exports+format+'">'+format.toUpperCase()+'</a>').join('')+
+      '<button type="button" class="alt" id="catalog-xlsx">Baixar Excel</button></div></section>');
+    const excelButton = app.querySelector('#catalog-xlsx');
+    excelButton.onclick = async () => {
+      excelButton.disabled = true;
+      try {
+        const {properties} = await request(exports+'json');
+        if (isCurrent()) saveFile('imoveis.xlsx', new Blob([catalogWorkbook(properties)], {
+          type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }));
+      } catch (error) {
+        if (isCurrent()) report(error.message);
+      } finally {
+        excelButton.disabled = false;
+      }
+    };
     const savedModels = app.querySelector('#saved-models');
     request(endpoint+'/modelos').then(items => {
       savedModels.innerHTML = '<h3>Mapeamentos salvos</h3>' + (items.map(item => '<p><strong>'+escape(item.source)+
