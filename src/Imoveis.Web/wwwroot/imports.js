@@ -1,10 +1,10 @@
 import {normalizeZone, standardZones} from './property-zones.js';
-import {delimited, excel} from './import-files.js';
+import {delimited, excel, structuredRows} from './import-files.js';
 
 const endpoint = '/api/admin/importacoes';
 const labels = {code:'Código do imóvel',title:'Título',kind:'Tipo de imóvel',bedrooms:'Dormitórios',
   district:'Bairro',city:'Cidade',zone:'Zona',location:'Bairro e cidade',price:'Preço',size:'Área (m²)',notes:'Observações'};
-const aliases = {code:['codigo','cod','id','codigoimovel'],title:['titulo','nome','descricao'],
+const aliases = {code:['codigo','cod','codigoimovel','id'],title:['titulo','nome','descricao'],
   kind:['ctipo','tipoimovel','tipo'],bedrooms:['dormitorio','dormitorios','dormitoriosquanto','quartos'],
   district:['bairro'],city:['cidade','municipio'],zone:['zona','regiao','zonacidade'],location:['local','localizacao'],
   price:['valor','preco','vlvenda','precovenda'],size:['area','aream2','metragem'],notes:['observacao','observacoes','obs','notas']};
@@ -92,8 +92,8 @@ export function mountImport(ui) {
   const choose = () => {
     originalFile = null;
     start(1);
-    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV ou TXT delimitado. No Excel, será usada a primeira aba.</p>'+
-      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt"></label>'+
+    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON ou XML. No Excel, será usada a primeira aba.</p>'+
+      '<label>Arquivo de imóveis<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
     const savedModels = app.querySelector('#saved-models');
     request(endpoint+'/modelos').then(items => {
@@ -115,7 +115,12 @@ export function mountImport(ui) {
       try {
         event.target.disabled = true;
         if (file.size > 8e6) throw Error('Selecione um arquivo de até 8 MB.');
-        rows = /\.xlsx$/i.test(file.name) ? await excel(file) : delimited(await file.text());
+        const extension = file.name.split('.').at(-1).toLowerCase();
+        if (extension === 'xlsx') rows = await excel(file);
+        else {
+          const text = await file.text();
+          rows = extension === 'json' || extension === 'xml' ? structuredRows(text, extension) : delimited(text);
+        }
         if (rows.length < 2 || rows[0].length < 1) throw Error('Inclua o cabeçalho e ao menos uma linha de dados.');
         if (rows.length > 5001 || rows[0].length > 100) throw Error('Use até 5.000 registros e 100 colunas por arquivo.');
         fileName = file.name;
@@ -123,7 +128,8 @@ export function mountImport(ui) {
         const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(Array.from(rows[0],normalize))));
         signature = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,'0')).join('');
         models = await request(endpoint+'/modelos/'+signature);
-        mapping = Array.from(rows[0],col => Object.keys(aliases).find(k => aliases[k].includes(normalize(col))) ?? '');
+        const hasCode = rows[0].some(col => ['code','codigo','cod','codigoimovel'].includes(normalize(col)));
+        mapping = Array.from(rows[0],col => hasCode && normalize(col) === 'id' ? '' : Object.keys(aliases).find(k => [k,...aliases[k]].includes(normalize(col))) ?? '');
         source = '';
         if (models.length === 1 && models[0].mapping.length === mapping.length) {
           mapping = models[0].mapping;

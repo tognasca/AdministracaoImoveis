@@ -15,3 +15,36 @@ export async function excel(file){
  const sheet=await xml(new URL(target,'https://example.invalid/xl/workbook.xml').pathname.slice(1));
  return [...sheet.getElementsByTagName('row')].map(r=>{const row=[];for(const c of r.getElementsByTagName('c')){const col=(c.getAttribute('r')||'A').match(/^[A-Z]+/)[0];let i=0;for(const x of col)i=i*26+x.charCodeAt(0)-64;const v=c.getElementsByTagName('v')[0]?.textContent??'';row[i-1]=c.getAttribute('t')==='s'?shared[+v]??'':c.getAttribute('t')==='inlineStr'?[...c.getElementsByTagName('t')].map(t=>t.textContent).join(''):v}return row}).filter(r=>r.some(Boolean));
 }
+
+export function structuredRows(text, extension) {
+  let records;
+  if (extension === 'json') {
+    const document = JSON.parse(text.replace(/^\uFEFF/, ''));
+    records = Array.isArray(document) ? document : document?.properties;
+  } else {
+    if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw Error('Declarações de entidades XML não são aceitas.');
+    const document = new DOMParser().parseFromString(text, 'application/xml');
+    if (document.querySelector('parsererror') || document.documentElement.localName !== 'imoveis')
+      throw Error('Use um XML com a estrutura imoveis/imovel.');
+    records = [...document.documentElement.children].filter(node => node.localName === 'imovel')
+      .map(node => Object.fromEntries([...node.children].filter(field => !field.children.length)
+        .map(field => [field.localName, field.textContent])));
+  }
+  if (!Array.isArray(records) || !records.length || records.length > 5000)
+    throw Error('O arquivo precisa conter de 1 a 5.000 imóveis.');
+  const headers = new Set();
+  for (const record of records) {
+    if (!record || typeof record !== 'object' || Array.isArray(record))
+      throw Error('Cada imóvel deve ser um registro com campos.');
+    for (const [key, value] of Object.entries(record)) {
+      if (typeof value !== 'string' && typeof value !== 'number') continue;
+      headers.add(key);
+      if (headers.size > 100) throw Error('Use até 100 colunas por arquivo.');
+    }
+  }
+  const columns = [...headers];
+  return [columns, ...records.map(record => columns.map(key => {
+    const value = Object.hasOwn(record, key) ? record[key] : null;
+    return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+  }))];
+}

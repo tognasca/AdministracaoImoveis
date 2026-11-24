@@ -32,3 +32,13 @@ await ensurePdfCodes([{data:{title:'Apartamento Teste',size:'50',city:'Cotia'}}]
   result => assert.equal(result,undefined));
 assert.match(original,/^PDF-[A-F0-9]{20}$/);
 console.log('Verificações de importação 2.0: OK');
+
+const importFiles = await readFile(new URL('../src/Imoveis.Web/wwwroot/import-files.js', import.meta.url), 'utf8');
+const {structuredRows} = await import('data:text/javascript;base64,' + Buffer.from(importFiles).toString('base64'));
+assert.deepEqual(structuredRows(JSON.stringify({properties:[
+  {code:'001',price:450000,photos:[]},
+  {code:'002',city:'Cotia'}
+]}),'json'), [['code','price','city'],['001','450000',''],['002','','Cotia']]);
+assert.throws(() => structuredRows('{"properties":[null]}','json'), /registro/);
+assert.throws(() => structuredRows('<!DOCTYPE imoveis><imoveis/>','xml'), /entidades/);
+console.log('Importação estruturada: códigos, colunas ausentes e rejeição de formatos inválidos.');

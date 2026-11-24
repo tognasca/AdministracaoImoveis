@@ -114,8 +114,8 @@ static class ImportEndpoints
                 || input.Rows.Any(row => row?.Data is null))
                 return Results.BadRequest("Lote inválido.");
             if (input.OriginalFile is { } file && (file.Length is <= 0 or > 8_000_000
-                || Path.GetExtension(input.Filename).ToLowerInvariant() is not (".csv" or ".txt" or ".xlsx" or ".pdf")))
-                return Results.BadRequest("O arquivo original deve ser PDF, Excel, CSV ou TXT de até 8 MB.");
+                || Path.GetExtension(input.Filename).ToLowerInvariant() is not (".csv" or ".txt" or ".xlsx" or ".pdf" or ".json" or ".xml")))
+                return Results.BadRequest("O arquivo original deve ser PDF, Excel, CSV, TXT, JSON ou XML de até 8 MB.");
             var source = input.Source.Trim();
             var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             try
