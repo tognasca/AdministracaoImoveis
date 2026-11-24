@@ -38,6 +38,12 @@ const {chromium} = require('playwright');
     await page.locator('#preview-width').selectOption('390');
     const frame = page.frameLocator('#storefront-preview');
     await frame.locator('body[data-estate-template=boutique]').waitFor();
+    await page.locator('#hero-source').selectOption('upload');
+    await page.locator('#hero-file').setInputFiles({name:'hero.png',mimeType:'image/png',
+      buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMUi6hgYGBgYmBgYGBgAAAKkADqFPYWGgAAAABJRU5ErkJggg==','base64')});
+    await page.locator('#hero-save').click();
+    await page.locator('#hero-status').getByText('Imagem salva como rascunho.').waitFor();
+    await frame.locator('.estate-hero:not(.estate-hero-plain) .estate-banner img').waitFor();
     await page.getByRole('button',{name:'Salvar rascunho',exact:true}).click();
     await page.getByText('Rascunho do modelo salvo.',{exact:true}).waitFor();
     assert.equal(await theme.inputValue(),'boutique');

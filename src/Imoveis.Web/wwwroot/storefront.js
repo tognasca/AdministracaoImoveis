@@ -37,12 +37,36 @@ function listingCard(home) {
 
 let previewTheme;
 let currentSettings;
+let previewBanner;
+function showPreviewBanner() {
+  const hero = app.querySelector('.estate-hero');
+  if (!hero || !previewBanner) return;
+  const image = hero.querySelector('.estate-banner img');
+  if (image?.getAttribute('src') === previewBanner) return;
+  hero.querySelector('.estate-banner')?.remove();
+  const banner = document.createElement('div');
+  banner.className = 'estate-banner';
+  const replacement = new Image();
+  replacement.alt = '';
+  replacement.onload = () => hero.classList.remove('estate-hero-plain');
+  replacement.onerror = () => {
+    banner.remove();
+    hero.classList.add('estate-hero-plain');
+  };
+  banner.append(replacement);
+  hero.prepend(banner);
+  replacement.src = previewBanner;
+}
 window.addEventListener('message', event => {
   if (window.parent === window || event.source !== window.parent || event.origin !== location.origin ||
       new URLSearchParams(location.search).get('preview') !== 'theme' || event.data?.type !== 'storefront-theme') return;
   previewTheme = event.data.theme;
   applyTheme(previewTheme);
   if (currentSettings) applyBrandColors(currentSettings);
+  if (typeof event.data.banner === 'string' && /^\/api\/admin\/vitrine\/hero\/(premium|minimal|modern|commercial|boutique)\/imagem(\?v=\d+)?$/.test(event.data.banner)) {
+    previewBanner = event.data.banner;
+    showPreviewBanner();
+  }
 });
 
 function applyTheme(theme) {
@@ -132,6 +156,12 @@ export async function storefront(params, isCurrent) {
     '<div class="row estate-pages">' + (page > 1 ? storefrontLink('Página anterior', 'vitrine?' + query(page-1)) : '') +
     (homes.length === 30 ? storefrontLink('Próxima página', 'vitrine?' + query(page+1)) : '') + '</div></section>';
 
+  const activeBanner = app.querySelector('.estate-banner img');
+  if (activeBanner) activeBanner.addEventListener('error', () => {
+    activeBanner.closest('.estate-banner').remove();
+    app.querySelector('.estate-hero')?.classList.add('estate-hero-plain');
+  });
+  showPreviewBanner();
   const results = document.querySelector('#listing-title');
   function showResults() {
     results.focus({preventScroll:true});

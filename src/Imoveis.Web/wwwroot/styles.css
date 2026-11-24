@@ -273,3 +273,8 @@ td input,td select { min-width: 140px; }
   .workspace .pdf-grid td[colspan],.workspace .pdf-grid .pdf-row-review,.workspace .pdf-grid td:has(textarea) { grid-column:1/-1; }
   .workspace .pdf-grid :is(input,textarea,select,details) { min-width:0; max-width:100%; }
 }
+#hero-settings { min-width:0; margin:16px 0; padding:14px; border:1px solid var(--line); border-radius:var(--radius); }
+#hero-settings legend { padding-inline:6px; font-weight:700; }
+#hero-settings label { margin-bottom:8px; }
+#hero-settings [hidden] { display:none; }
+#hero-photo-preview { display:block; max-width:240px; width:100%; max-height:160px; object-fit:cover; border-radius:10px; }

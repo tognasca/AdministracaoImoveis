@@ -37,14 +37,16 @@ static class PublicEndpoints
     {
         var api = external ? "" : "/api";
         group.MapGet(api + "/vitrine/configuracao", async (HttpContext http, IConfiguration settings,
-            StorefrontImages images, StorefrontBrand brand, StorefrontMenu menu, TenantContext tenant, CancellationToken ct) =>
+            NpgsqlDataSource db, StorefrontImages images, StorefrontBrand brand, StorefrontMenu menu, TenantContext tenant, CancellationToken ct) =>
         {
             var tenantId = CatalogTenant(http, tenant);
             var (name, color, email, whatsapp, textColor, colorOpacity) = await brand.Read(ct, tenantId);
             var number = whatsapp ?? (tenantId == TenantContext.LegacyId ? settings["Vitrine:WhatsApp"] : null) ?? "";
             var media = external ? $"/api/catalogo/{http.Request.RouteValues["slug"]}" : "";
+            var banner = await ModelHeroes.HasPublished(db,tenantId,ct) ? media + "/media/vitrine/hero" :
+                images.Exists(StorefrontImage.Banner,tenantId) ? media + "/media/vitrine/banner" : null;
             return Results.Ok(new { name, color, colorOpacity, textColor, email, menu = await menu.List(true, ct, tenantId), whatsapp = number.Length is >= 10 and <= 15 && number.All(char.IsAsciiDigit)
-                ? number : "", banner = images.Exists(StorefrontImage.Banner, tenantId) ? media + "/media/vitrine/banner" : null,
+                ? number : "", banner, defaultBanner = images.Exists(StorefrontImage.Banner, tenantId) ? media + "/media/vitrine/banner" : null,
                 logo = images.Exists(StorefrontImage.Logo, tenantId) ? media + "/media/vitrine/logo" : null });
         });
         group.MapGet(api + "/vitrine/tema", (HttpContext http, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
@@ -65,6 +67,8 @@ static class PublicEndpoints
             if (result.Count == 0) return Results.NotFound();
             return external ? Results.Ok(PublicProperty(result[0])) : Results.Ok(result[0]);
         });
+        group.MapGet("/media/vitrine/hero", (HttpContext http, NpgsqlDataSource db, MediaStore media, StorefrontImages images,
+            TenantContext tenant, CancellationToken ct) => ModelHeroes.Read(db,media,images,CatalogTenant(http,tenant),null,false,ct));
         group.MapGet("/media/vitrine/banner", (HttpContext http, StorefrontImages images, TenantContext tenant, CancellationToken ct) =>
             images.Read(StorefrontImage.Banner, ct, CatalogTenant(http, tenant)));
         group.MapGet("/media/vitrine/logo", (HttpContext http, StorefrontImages images, TenantContext tenant, CancellationToken ct) =>
