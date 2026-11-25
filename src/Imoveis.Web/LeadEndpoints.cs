@@ -3,7 +3,7 @@ using System.Security.Claims;
 
 record LeadInput(Guid? PropertyId, string Name, string? Email, string? Phone, string Status, Guid? AssignedTo, string? Notes);
 record LeadView(Guid Id, Guid? PropertyId, string Name, string? Email, string? Phone,
-    string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt);
+    string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt, string? PropertyCode, string? PropertyTitle);
 
 record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt);
 
@@ -16,16 +16,34 @@ static class LeadEndpoints
         group.MapGet("/responsaveis", async (StaffStore staff, TenantContext tenant, CancellationToken ct) =>
             (await staff.List(ct, tenant.Id)).Where(user => user.Active)
                 .Select(user => new { user.Id, user.Username }));
-        group.MapGet("", async (NpgsqlDataSource db, TenantContext tenant, string? status, CancellationToken ct) =>
+        group.MapGet("", async (NpgsqlDataSource db, TenantContext tenant, string? status, string? q, string? assignee, bool? queue,
+            int? offset, int? limit, CancellationToken ct) =>
         {
             if (!string.IsNullOrEmpty(status) && !Statuses.Contains(status)) return Results.BadRequest("Etapa inválida.");
+            var search = q?.Trim() ?? "";
+            Guid assigneeId = Guid.Empty;
+            if (search.Length > 120 || offset is < 0 || limit is < 1 or > 200 ||
+                (assignee is not (null or "" or "unassigned") && !Guid.TryParse(assignee, out assigneeId)))
+                return Results.BadRequest("Confira os filtros e a paginação.");
             await using var command = db.CreateCommand("""
-                SELECT id,property_id,name,email,phone,status,assigned_to,notes,created_at
-                FROM saas_leads WHERE tenant_id=@tenant AND (@status='' OR status=@status)
-                ORDER BY created_at DESC LIMIT 200
+                SELECT l.id,l.property_id,l.name,l.email,l.phone,l.status,l.assigned_to,l.notes,l.created_at,p.code,p.title
+                FROM saas_leads l LEFT JOIN properties p ON p.tenant_id=l.tenant_id AND p.id=l.property_id
+                WHERE l.tenant_id=@tenant AND (@status='' OR l.status=@status)
+                  AND (@assignee='' OR (@assignee='unassigned' AND l.assigned_to IS NULL) OR l.assigned_to=@assigneeId)
+                  AND (NOT @queue OR (l.status='new' AND l.assigned_to IS NULL))
+                  AND (@search='' OR concat_ws(' ',l.name,l.email,l.phone,p.code,p.title) ILIKE @pattern ESCAPE '!')
+                ORDER BY CASE WHEN @queue THEN l.created_at END ASC, l.created_at DESC, l.id
+                LIMIT @limit OFFSET @offset
                 """);
             command.Parameters.AddWithValue("tenant", tenant.Id);
             command.Parameters.AddWithValue("status", status ?? "");
+            command.Parameters.AddWithValue("assignee", assignee ?? "");
+            command.Parameters.AddWithValue("assigneeId", assigneeId);
+            command.Parameters.AddWithValue("queue", queue == true);
+            command.Parameters.AddWithValue("search", search);
+            command.Parameters.AddWithValue("pattern", "%" + search.Replace("!", "!!").Replace("%", "!%").Replace("_", "!_") + "%");
+            command.Parameters.AddWithValue("limit", limit ?? 200);
+            command.Parameters.AddWithValue("offset", offset ?? 0);
             await using var reader = await command.ExecuteReaderAsync(ct);
             var leads = new List<LeadView>();
             while (await reader.ReadAsync(ct))
@@ -33,7 +51,8 @@ static class LeadEndpoints
                     reader.GetString(2),reader.IsDBNull(3)?null:reader.GetString(3),
                     reader.IsDBNull(4)?null:reader.GetString(4),reader.GetString(5),
                     reader.IsDBNull(6)?null:reader.GetGuid(6),
-                    reader.IsDBNull(7)?null:reader.GetString(7),reader.GetDateTime(8)));
+                    reader.IsDBNull(7)?null:reader.GetString(7),reader.GetDateTime(8),
+                    reader.IsDBNull(9)?null:reader.GetString(9),reader.IsDBNull(10)?null:reader.GetString(10)));
             return Results.Ok(leads);
         });
         group.MapPost("", async (LeadInput input, ClaimsPrincipal user, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>

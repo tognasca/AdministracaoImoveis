@@ -7,9 +7,37 @@ const stages = [['new','Novo'],['contacted','Em contato'],['visit','Visita'],['p
 const stageOptions = selected => stages.map(([value,label]) =>
   '<option value="'+value+'"'+(selected===value?' selected':'')+'>'+label+'</option>').join('');
 
-export async function crm(isCurrent) {
-  const [leads, staff] = await Promise.all([request(crmPath), request(crmPath+'/responsaveis')]);
-  if (!isCurrent()) return;
+const pageSize = 30;
+let renderVersion = 0;
+
+function waitingSince(createdAt) {
+  const minutes = Math.max(0,Math.floor((Date.now()-Date.parse(createdAt))/60000));
+  if (minutes < 1) return 'Chegou agora';
+  if (minutes < 60) return 'Aguardando há '+minutes+' min';
+  if (minutes < 1440) return 'Aguardando há '+Math.floor(minutes/60)+' h';
+  const days = Math.floor(minutes/1440);
+  return 'Aguardando há '+days+(days === 1 ? ' dia' : ' dias');
+}
+
+function whatsappLink(phone, reference) {
+  let digits = (phone ?? '').replace(/[^0-9]/g,'');
+  if (digits.length === 10 || digits.length === 11) digits = '55'+digits;
+  if (!/^[1-9][0-9]{7,14}$/.test(digits)) return '';
+  const message = reference ? 'Olá! Estou entrando em contato sobre o imóvel '+reference+'.' : 'Olá! Como posso ajudar?';
+  return '<a class="alt btn" href="https://wa.me/'+digits+'?text='+encodeURIComponent(message)+
+    '" target="_blank" rel="noopener noreferrer">WhatsApp</a>';
+}
+
+export async function crm(isActive, params = {queue:true, q:'', assignee:'', page:0}) {
+  const version = ++renderVersion;
+  const isCurrent = () => isActive() && app.contains(pipeline);
+  const query = new URLSearchParams({q:params.q,assignee:params.assignee,queue:params.queue,
+    offset:params.page*pageSize,limit:pageSize+1});
+  const [result, staff] = await Promise.all([request(crmPath+'?'+query), request(crmPath+'/responsaveis')]);
+  if (!isActive() || version !== renderVersion) return;
+  if (!result.length && params.page > 0) return crm(isActive,{...params,page:params.page-1});
+  const leads = result.slice(0,pageSize);
+  const columns = params.queue ? stages.slice(0,1) : stages;
   const options = selected => '<option value="">Sem responsável</option>' +
     (selected && !staff.some(user => user.id === selected) ?
       '<option value="'+escape(selected)+'" selected>Responsável inativo</option>' : '') +
@@ -19,7 +47,7 @@ export async function crm(isCurrent) {
     '<label>Buscar imóvel por código ou título<input type="search" class="crm-property-search" maxlength="120"></label>'+
     '<button type="button" class="alt crm-property-find">Buscar imóvel</button>'+
     '<label>Imóvel vinculado<select name="propertyId"><option value="">Sem imóvel</option>'+
-    (lead?.propertyId ? '<option value="'+escape(lead.propertyId)+'" selected>Imóvel atual</option>' : '')+
+    (lead?.propertyId ? '<option value="'+escape(lead.propertyId)+'" selected>'+escape([lead.propertyCode,lead.propertyTitle].filter(Boolean).join(' · ') || 'Imóvel atual')+'</option>' : '')+
     '</select></label></div>';
   const formData = form => {
     const values = Object.fromEntries(new FormData(form));
@@ -34,31 +62,52 @@ export async function crm(isCurrent) {
     '<label>Etapa<select name="status">'+stageOptions('new')+'</select></label></div>' +
     links()+'<label>Observações<textarea name="notes" maxlength="4000"></textarea></label>' +
     '<button>Adicionar contato</button></form></section>' +
-    '<section class="crm-pipeline"><h3>Contatos ('+leads.length+')</h3>' +
-    '<label class="crm-filter">Filtrar por corretor<select id="crm-assignee"><option value="all">Todos</option>'+options()+'</select></label>' +
-    '<div class="crm-board">'+stages.map(([stage,label]) => '<section class="box crm-stage" data-stage="'+stage+'">' +
+    '<section class="crm-pipeline"><h3>Fila de atendimento</h3>' +
+    '<form id="crm-filters" class="box"><div class="grid"><label>Exibir<select name="queue">'+
+    '<option value="true"'+(params.queue?' selected':'')+'>Novos sem responsável</option>'+
+    '<option value="false"'+(!params.queue?' selected':'')+'>Todos os contatos</option></select></label>'+
+    '<label>Buscar contatos<input name="q" type="search" maxlength="120" value="'+escape(params.q)+'" placeholder="Nome, telefone ou imóvel"></label>'+
+    '<label>Filtrar por corretor<select name="assignee"'+(params.queue?' disabled':'')+'><option value="">Todos</option>'+
+    '<option value="unassigned">Sem responsável</option>'+staff.map(user =>
+      '<option value="'+escape(user.id)+'">'+escape(user.username)+'</option>').join('')+'</select></label></div>'+
+    '<div class="row"><button type="submit">Aplicar filtros</button></div></form>'+
+    '<div class="crm-board">'+columns.map(([stage,label]) => '<section class="box crm-stage" data-stage="'+stage+'">' +
       '<h4>'+label+' <span class="chips"></span></h4><p class="muted crm-stage-empty">Nenhum contato nesta etapa.</p>' +
       leads.filter(lead => lead.status === stage).map(lead =>
       '<form class="crm-lead" data-assignee="'+escape(lead.assignedTo)+'" data-id="'+escape(lead.id)+'"><div><strong>'+escape(lead.name)+'</strong>' +
       (lead.email?'<p>'+escape(lead.email)+'</p>':'') +
       (lead.phone?'<p>'+escape(lead.phone)+'</p>':'') +
+      (lead.status === 'new' && !lead.assignedTo ? '<p class="chips crm-wait">'+waitingSince(lead.createdAt)+'</p>' : '') +
+      (lead.propertyCode ? '<p><a href="/#editar/'+escape(lead.propertyId)+'">'+
+        escape(lead.propertyCode+' · '+lead.propertyTitle)+'</a></p>' : '') +
+      whatsappLink(lead.phone,lead.propertyCode) +
       '</div><label>Etapa<select name="status">'+stageOptions(lead.status)+'</select></label>' +
       links(lead)+'<label>Observações<textarea name="notes" maxlength="4000" rows="2">'+escape(lead.notes)+'</textarea></label>' +
-      '<div><button class="alt">Salvar</button>' +
+      '<div><button type="submit" class="alt">Salvar</button>' +
       '<details class="lead-history"><summary>Histórico de etapas</summary><ol></ol></details></div></form>').join('')+'</section>').join('')+'</div></section>';
+  const pipeline = app.querySelector('.crm-pipeline');
+  pipeline.insertAdjacentHTML('beforeend','<div class="row"><span>Página '+(params.page+1)+'</span>'+
+    '<button type="button" class="alt" data-crm-page="previous"'+(params.page===0?' disabled':'')+'>Anterior</button>'+
+    '<button type="button" class="alt" data-crm-page="next"'+(result.length<=pageSize?' disabled':'')+'>Próxima</button></div>');
   bindLogout();
-  const assignee = app.querySelector('#crm-assignee');
-  const cards = [...app.querySelectorAll('.crm-lead')];
-  function refreshBoard() {
-    for (const card of cards) card.hidden = assignee.value !== 'all' && card.dataset.assignee !== assignee.value;
-    for (const column of app.querySelectorAll('.crm-stage')) {
-      const visible = column.querySelectorAll('.crm-lead:not([hidden])').length;
-      column.querySelector('.chips').textContent = visible;
-      column.querySelector('.crm-stage-empty').hidden = visible > 0;
-    }
+  const filters = app.querySelector('#crm-filters');
+  filters.elements.assignee.value = params.assignee;
+  filters.elements.queue.onchange = () => {
+    filters.elements.assignee.disabled = filters.elements.queue.value === 'true';
+  };
+  const navigate = next => crm(isActive,next).catch(error => { if (isActive()) report(error.message); });
+  filters.onsubmit = event => {
+    event.preventDefault();
+    const queue = filters.elements.queue.value === 'true';
+    navigate({queue,q:filters.elements.q.value.trim(),assignee:queue?'':filters.elements.assignee.value,page:0});
+  };
+  for (const button of pipeline.querySelectorAll('[data-crm-page]'))
+    button.onclick = () => navigate({...params,page:params.page+(button.dataset.crmPage==='next'?1:-1)});
+  for (const column of pipeline.querySelectorAll('.crm-stage')) {
+    const count = column.querySelectorAll('.crm-lead').length;
+    column.querySelector('.chips').textContent = count;
+    column.querySelector('.crm-stage-empty').hidden = count > 0;
   }
-  assignee.onchange = refreshBoard;
-  refreshBoard();
   for (const button of app.querySelectorAll('.crm-property-find')) {
     const form = button.form;
     const search = form.querySelector('.crm-property-search');
@@ -92,7 +141,7 @@ export async function crm(isCurrent) {
     button.disabled=true;
     try {
       await request(crmPath,'POST',formData(create));
-      if (isCurrent()) await crm(isCurrent);
+      if (isCurrent()) await crm(isActive,{queue:false,q:'',assignee:'',page:0});
     } catch(error) { if(isCurrent()) report(error.message); }
     finally { button.disabled=false; }
   };
@@ -115,19 +164,15 @@ export async function crm(isCurrent) {
       event.preventDefault();
       const lead=leads.find(item=>item.id===form.dataset.id);
       if(!lead) return;
-      const button=form.querySelector('button');
+      const button=form.querySelector('button[type=submit]');
       button.disabled=true;
       try {
         await request(crmPath+'/'+encodeURIComponent(lead.id),'PUT',{
           name:lead.name,email:lead.email,phone:lead.phone,...formData(form)
         });
         if(isCurrent()) {
-          form.dataset.assignee = form.elements.assignedTo.value;
-          const column = [...app.querySelectorAll('.crm-stage')].find(stage => stage.dataset.stage === form.elements.status.value);
-          if (column && form.parentNode !== column) column.append(form);
-          refreshBoard();
-          report('Contato atualizado.');
-          await loadHistory();
+          await crm(isActive,params);
+          if (isActive()) report('Contato atualizado.');
         }
       } catch(error) { if(isCurrent()) report(error.message); }
       finally { button.disabled=false; }
