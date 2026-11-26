@@ -79,3 +79,21 @@ assert.equal(prepare([['Z-1','Casa']],['code','title'],priorZone,'Teste')[0].dat
 const centerCatalog = catalog.replace('METRAGEM  DORMS','CENTRO\nMETRAGEM  DORMS');
 assert.equal(classifyPdfPages([centerCatalog]).properties.length,1);
 console.log('OK: zona válida na prévia e preservada ao atualizar sem coluna; Centro não elimina o empreendimento.');
+
+const units = classifyPdfPages([
+  'RENDA  VALOR\nEMPREENDIMENTO  BLOCO  UNIDADE DORM(S)  ÁREA  AVALIAÇÃO\nLIMITADOR  PROMOCIONAL\nResidencial Alameda  Torre A  0101  2  32,59  3.960,00  254.000,00  218.000,00',
+  'Empreendimento  Torre  UND Dorms Perfil Sacada Vagas Regional  De :  Por :\nResidencial Alameda  OFERTA  Torre A  0101  2  HIS2  Não  0  1  R$  254.000,00  R$  211.000,00'
+]);
+assert.equal(units.model,'units');
+assert.equal(units.properties.length,2);
+const [appraisal, discount] = units.properties;
+assert.equal(appraisal.data.price,'218000.00');
+assert.equal(appraisal.data.size,'32.59');
+assert.equal(discount.data.price,'211000.00');
+assert.equal(discount.data.size,undefined);
+assert.equal(discount.page,2);
+assert.match(discount.data.notes,/OFERTA[\s\S]*Perfil: HIS2/);
+assert.match(discount.data.title,/unidade 0101/);
+await ensurePdfCodes(units.properties);
+assert.equal(appraisal.data.code,discount.data.code);
+console.log('OK: duas estruturas de tabelão por unidade, preço promocional e identidade entre páginas.');

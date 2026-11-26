@@ -31,7 +31,8 @@ export function readPdfBlock(text) {
 
 export function classifyPdfPages(pages, model = 'auto') {
   const selected = model === 'auto' ? detectPdfModel(pages) : model;
-  const result = (selected === 'kallas' || selected === 'catalog') ? classifyKallasPages(pages) : classifyGenericPages(pages);
+  const result = selected === 'units' ? classifyUnitTables(pages) :
+    (selected === 'kallas' || selected === 'catalog') ? classifyKallasPages(pages) : classifyGenericPages(pages);
   return {...result, model:selected};
 }
 
@@ -141,7 +142,58 @@ const catalogHeader = line => {
 const projectPattern = /^(.+?)\s{2,}((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}|PRONTO)\s{2,}(.+)$/i;
 const optionPattern = /^(.*?)\s{2,}(.*?)\s{2,}(.*?)\s+R\$\s*([\d.,]+)/i;
 
+function unitTableHeader(page) {
+  if (/\bempreendimento\s+bloco\s+unidade\s+dorm.*\bavalia[cç][aã]o\b/i.test(page) &&
+      /\bpromocional\b/i.test(page)) return 'appraisal';
+  if (/\bempreendimento[^\n]*dorms[^\n]*perfil[^\n]*sacada[^\n]*vagas[^\n]*\bde\s*:[^\n]*\bpor\s*:/i.test(page))
+    return 'discount';
+  return null;
+}
+
+function classifyUnitTables(pages) {
+  const properties = [], information = [];
+  pages.forEach((page, index) => {
+    const layout = unitTableHeader(page);
+    if (!layout) {
+      const generic = classifyGenericPages([page]);
+      for (const row of [...generic.properties, ...generic.information]) row.page = index + 1;
+      properties.push(...generic.properties);
+      information.push(...generic.information);
+      return;
+    }
+    for (const raw of page.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const cells = line.replace(/R\$\s+/g,'R$ ').split(/\s{2,}/);
+      const fields = layout === 'appraisal' ? 6 : 8;
+      const [title, ...context] = cells.slice(0,-fields);
+      const [unit, bedrooms] = cells.slice(-fields);
+      const price = catalogNumber((cells.at(-1) ?? '').replace(/^R\$\s*/,''));
+      const block = context.at(-1);
+      if (!title || !block || !/^\d+[\w-]*$/.test(unit ?? '') || !/^\d+$/.test(bedrooms ?? '') || !price) {
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      const labels = layout === 'appraisal' ?
+        ['Área','Renda limitadora','Avaliação','Valor promocional'] :
+        ['Perfil','Sacada','Vagas','Regional','Valor de','Valor por'];
+      const notes = context.slice(0,-1).concat(cells.slice(2-fields).map((value,i) => labels[i]+': '+value));
+      const data = {
+        title:title+' — '+block+' / unidade '+unit,
+        kind:'Apartamento',
+        bedrooms,
+        price,
+        notes:['Empreendimento: '+title,'Bloco/torre: '+block,'Unidade: '+unit,...notes].join('\n')
+      };
+      if (layout === 'appraisal') data.size = catalogNumber(cells.at(-4));
+      properties.push({page:index+1,text:line,data,unitIdentity:true});
+    }
+  });
+  return {properties,information};
+}
+
 export function detectPdfModel(pages) {
+  if (pages.some(unitTableHeader)) return 'units';
   const text = pages.join('\n');
   // Prefer structural evidence over supplier names. Other developers use the same
   // project / delivery / address / variant layout under different branding.
@@ -212,7 +264,7 @@ function classifyKallasPages(pages) {
         continue;
       }
       const [, variant, rooms, parking, price] = option;
-      const area = variant.match(/^(\d[\d.,]*)\s*m\s*[²2]/i);
+      const area = /\d\s*(?:a|ou|e|[-/])\s*\d/i.test(variant) ? null : variant.match(/^(\d[\d.,]*)\s*m\s*[²2]/i);
       const amount = catalogNumber(price);
       const kind = /loja/i.test(variant + ' ' + rooms) ? 'Loja' :
         /cobertura/i.test(variant) ? 'Cobertura' : /studio/i.test(rooms) ? 'Studio' : 'Apartamento';
@@ -231,8 +283,9 @@ function classifyKallasPages(pages) {
           'Dormitórios ou suítes no PDF: ' + rooms.trim(),
           'Vagas no PDF: ' + parking.trim(),
           'Preço a partir de, sujeito à confirmação de disponibilidade.',
+          line.slice(option[0].length).trim() ? 'Referências no PDF: '+line.slice(option[0].length).trim() : '',
           'Confirmar cidade e dados antes de publicar.'
-        ].join('\n')
+        ].filter(Boolean).join('\n')
       };
       properties.push({page:index+1,text:project.name+'\nEntrega: '+project.delivery+'\n'+project.address+'\n'+line,data});
     }
@@ -247,13 +300,13 @@ export async function ensurePdfCodes(rows) {
     if (String(row.data.code ?? '').trim()) continue;
     const data = row.data;
     const address = (data.notes ?? '').match(/(?:Endereço informado|Endereço):\s*([^\n]+)/i)?.[1] ?? '';
-    const identity = [data.title,data.kind,data.district,data.city,data.location,data.size,data.bedrooms,address]
+    const identity = (row.unitIdentity ? [data.title] : [data.title,data.kind,data.district,data.city,data.location,data.size,data.bedrooms,address])
       .map(value => String(value ?? '').trim().toLowerCase().normalize('NFC'));
     if (!identity.some(Boolean)) identity.push(row.text ?? crypto.randomUUID());
     const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(identity)));
     const base = 'PDF-'+Array.from(new Uint8Array(digest).slice(0,10),v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
     let code = base, suffix = 2;
-    while (used.has(code.toLowerCase())) code = base+'-'+suffix++;
+    while (!row.unitIdentity && used.has(code.toLowerCase())) code = base+'-'+suffix++;
     data.code = code;
     row.generatedCode = true;
     used.add(code.toLowerCase());

@@ -52,6 +52,18 @@ export function mountPdfImport(isCurrent) {
         file = upload;
         rows = result.properties.map(row => ({...row, selected:true}));
         await ensurePdfCodes(rows);
+        if (model === 'units') {
+          const counts = new Map();
+          for (const {data,unitIdentity} of rows) {
+            if (unitIdentity) counts.set(data.code,(counts.get(data.code) ?? 0)+1);
+          }
+          for (const row of rows) {
+            if (row.unitIdentity && counts.get(row.data.code) > 1) {
+              row.duplicateUnit = true;
+              row.selected = false;
+            }
+          }
+        }
         rows.forEach(row => applyPdfCityDefault(row.data));
         if (!isCurrent()) return;
         information = result.information;
@@ -103,6 +115,7 @@ export function mountPdfImport(isCurrent) {
       ((model === 'kallas' || model === 'catalog') ? '<p class="notice">Catálogo com múltiplos empreendimentos. Cada metragem e preço corresponde a uma opção de empreendimento. ' +
       'Os códigos ausentes são gerados automaticamente. Confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
       'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
+      (model === 'units' ? '<p class="notice">Os preços promocionais preenchem a coluna Preço. Unidades repetidas começam desmarcadas. Compare as páginas e selecione a oferta correta para cada unidade.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
       '<section class="box"><h3>Corrigir no Excel</h3><div class="row"><button type="button" class="alt" id="pdf-export">Exportar para Excel</button><label>Carregar Excel corrigido<input id="pdf-corrected" type="file" accept=".xlsx"></label></div><p class="muted">Edite a aba Imóveis e salve como .xlsx. Ao carregar, a planilha substitui esta grade. A gravação acontece somente após a conferência.</p></section>' +
       '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Quando o PDF não informa a cidade, usamos São Paulo; você pode alterar. Pendências de publicação não impedem salvar como rascunho.</p>' +
@@ -174,7 +187,7 @@ export function mountPdfImport(isCurrent) {
         if (!row.data.size && /\d+\s+a\s+\d+.*m[²2]/i.test(row.text ?? '')) issues.push('Conferir área: intervalo no PDF');
         if (row.selected && issues.length) needsReview++;
         const tr = grid.querySelector('[data-row="'+index+'"]');
-        tr.querySelector('.pdf-row-review').innerHTML = !row.selected ? '<span class="muted">Fora da importação</span>' :
+        tr.querySelector('.pdf-row-review').innerHTML = !row.selected ? '<span class="muted">'+(row.duplicateUnit ? 'Unidade repetida no PDF' : 'Fora da importação')+'</span>' :
           issues.length ? '<span class="pdf-review-badge">Revisar</span><ul>'+issues.map(issue => '<li>'+escape(issue)+'</li>').join('')+'</ul>' : '<span class="pdf-ready">Pronto para conferir</span>';
         tr.querySelectorAll('[data-field]').forEach(input => {
           const key = input.dataset.field;
