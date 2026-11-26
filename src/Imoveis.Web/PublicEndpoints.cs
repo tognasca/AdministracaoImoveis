@@ -93,7 +93,7 @@ static class PublicEndpoints
         return new { property.Id, property.Photos, Data = new
         {
             data.Code, data.Title, data.Kind, data.District, data.City, data.Zone, data.Price,
-            data.Bedrooms, data.Size, data.Album, data.CategoryId
+            data.Bedrooms, data.Size, data.Album, data.CategoryId, data.Rental
         } };
     }
 }

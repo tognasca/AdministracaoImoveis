@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source = await readFile(new URL('../src/Imoveis.Web/wwwroot/pdf-rows.js',import.meta.url),'utf8');
-const {classifyPdfPages,ensurePdfCodes,applyPdfCityDefault} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+const {classifyPdfPages,ensurePdfCodes,applyPdfTitleSuggestions} = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const parse = text => classifyPdfPages([text],'generic');
 const line = values => values.map((v,i) => i === values.length-1 ? v : v.padEnd([12,28,20,18,18][i])).join('');
 const header = line(['Código','Título','Bairro','Cidade','Valor']);
@@ -47,14 +47,14 @@ assert.equal(rows[0].data.code,before);
 console.log('OK: códigos automáticos únicos na grade, preservados e estáveis após mudança de preço.');
 
 for (const [input,expected] of [
-  [{},'São Paulo'],[{city:'   '},'São Paulo'],[{city:'Cotia'},'Cotia'],
-  [{location:'Centro - Osasco/SP'},'Osasco'],[{location:'Centro'},'São Paulo'],
+  [{},undefined],[{city:'   '},'   '],[{city:'Cotia'},'Cotia'],
+  [{location:'Centro - Osasco/SP'},'Osasco'],[{location:'Centro'},undefined],
   [{city:'Cotia',location:'Centro - Osasco/SP'},'Cotia']
 ]) {
-  applyPdfCityDefault(input);
+  applyPdfTitleSuggestions(input);
   assert.equal(input.city,expected);
 }
-console.log('OK: cidade padrão São Paulo, preservando cidade explícita ou informada na localização.');
+console.log('OK: cidade explícita ou informada na localização, sem usar cidade padrão.');
 
 const zonesSource = await readFile(new URL('../src/Imoveis.Web/wwwroot/property-zones.js',import.meta.url),'utf8');
 const {normalizeZone,zoneSelect,standardZones} = await import('data:text/javascript;base64,'+Buffer.from(zonesSource).toString('base64'));
@@ -79,3 +79,74 @@ assert.equal(prepare([['Z-1','Casa']],['code','title'],priorZone,'Teste')[0].dat
 const centerCatalog = catalog.replace('METRAGEM  DORMS','CENTRO\nMETRAGEM  DORMS');
 assert.equal(classifyPdfPages([centerCatalog]).properties.length,1);
 console.log('OK: zona válida na prévia e preservada ao atualizar sem coluna; Centro não elimina o empreendimento.');
+
+const units = classifyPdfPages([
+  'RENDA  VALOR\nEMPREENDIMENTO  BLOCO  UNIDADE DORM(S)  ÁREA  AVALIAÇÃO\nLIMITADOR  PROMOCIONAL\nResidencial Alameda  Torre A  0101  2  32,59  3.960,00  254.000,00  218.000,00',
+  'Empreendimento  Torre  UND Dorms Perfil Sacada Vagas Regional  De :  Por :\nResidencial Alameda  OFERTA  Torre A  0101  2  HIS2  Não  0  1  R$  254.000,00  R$  211.000,00'
+]);
+assert.equal(units.model,'units');
+assert.equal(units.properties.length,2);
+const [appraisal, discount] = units.properties;
+assert.equal(appraisal.data.price,'218000.00');
+assert.equal(appraisal.data.size,'32.59');
+assert.equal(discount.data.price,'211000.00');
+assert.equal(discount.data.size,undefined);
+assert.equal(discount.page,2);
+assert.match(discount.data.notes,/OFERTA[\s\S]*Perfil: HIS2/);
+assert.match(discount.data.title,/unidade 0101/);
+await ensurePdfCodes(units.properties);
+assert.equal(appraisal.data.code,discount.data.code);
+console.log('OK: duas estruturas de tabelão por unidade, preço promocional e identidade entre páginas.');
+
+const schedule = classifyPdfPages([
+  'Empreendimento Reserva da Lagoa - Torre B\nSinal  Financiamento\nUnidade  Área  Valor da Unidade  5%  6%  9%  3%  77%  Situação\n1902  97,92  704.245,13  35.212,26  1.457,06  21.127,35  21.127,35  542.268,75  Reservado'
+]);
+assert.equal(schedule.properties.length,1);
+assert.equal(schedule.properties[0].data.price,'704245.13');
+assert.equal(schedule.properties[0].reviewAvailability,true);
+assert.match(schedule.properties[0].data.notes,/Financiamento: 542.268,75/);
+const launch = classifyPdfPages([
+  'EDIFICIO RESERVA MADALENA\nTerminação 04 - 02 Qtos\nUnidades  Vaga  ÁREA  SINAL  MENSAIS  INTERCALADA  FINANCIAMENTO  TOTAL\n304  VENDIDO  47.804,00  2.584,00  8.075,00  180.880,00  323.000,00'
+]);
+assert.equal(launch.properties.length,1);
+assert.equal(launch.properties[0].data.price,'323000.00');
+assert.equal(launch.properties[0].data.bedrooms,'2');
+assert.equal(launch.properties[0].data.size,'');
+assert.equal(launch.properties[0].reviewAvailability,true);
+const market = classifyPdfPages(['PREÇO MÉDIO POR M² DE ÁREA TOTAL\nCentro  10.000,00']);
+assert.equal(market.model,'market-report');
+assert.equal(market.properties.length,0);
+console.log('OK: tabelas de venda com fluxo de pagamento, reservas, vendas e relatório de mercado.');
+
+const titleSuggestions = {title:'Apartamento de 2 quartos — Cotia/SP'};
+applyPdfTitleSuggestions(titleSuggestions);
+assert.equal(titleSuggestions.kind,'Apartamento');
+assert.equal(titleSuggestions.city,'Cotia');
+const explicitFields = {title:'Studio em Osasco/SP', city:'Barueri',kind:'Apartamento'};
+applyPdfTitleSuggestions(explicitFields);
+assert.equal(explicitFields.city,'Barueri');
+assert.equal(explicitFields.kind,'Apartamento');
+const ambiguousTitle = {title:'Reserva da Lagoa — Torre B'};
+applyPdfTitleSuggestions(ambiguousTitle);
+assert.equal(ambiguousTitle.city,undefined);
+assert.equal(ambiguousTitle.kind,undefined);
+console.log('OK: cidade e tipo pelo título, com prioridade aos campos explícitos.');
+const cityAfterPreposition = {title:'Studio mobiliado em Recife-PE'};
+applyPdfTitleSuggestions(cityAfterPreposition);
+assert.equal(cityAfterPreposition.city,'Recife');
+assert.equal(cityAfterPreposition.kind,'Studio');
+
+const {preparePriceUpdates} = await import('../src/Imoveis.Web/wwwroot/imports.js');
+const priceMapping = ['code','title','price'];
+const existingPrice = [{id:'imovel-1',data:{code:'P-1',title:'Título revisado',price:320000,version:4}}];
+const pricePreview = (code,price) => preparePriceUpdates([[code,'Título do PDF',price]],priceMapping,existingPrice,'Teste')[0];
+const priceUpdate = pricePreview('P-1','335.000,00');
+assert.equal(priceUpdate.status,'Atualizar');
+assert.equal(priceUpdate.data.price,335000);
+assert.equal(priceUpdate.data.title,'Título revisado');
+assert.equal(priceUpdate.data.version,4);
+assert.equal(pricePreview('P-1','320.000,00').status,'Sem alteração');
+assert.equal(pricePreview('P-2','335.000,00').status,'Revisar');
+assert.equal(pricePreview('P-1','').status,'Revisar');
+assert.equal(pricePreview('P-1','100.001').status,'Revisar');
+console.log('OK: atualização de preço preserva o cadastro, identifica valores iguais e rejeita códigos desconhecidos.');

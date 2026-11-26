@@ -5,24 +5,24 @@ let session = null;
 export function setSession(value) { session = value; }
 export function getSession() { return session; }
 export function adminNav() {
-  const [route,id] = location.hash.slice(1).split('?')[0].split('/');
+  const [route] = location.hash.slice(1).split('?')[0].split('/');
   const path = location.pathname.replace(/\/$/, '');
-  const current = route === 'editar' && id ? 'admin' :
-    route === 'importar' || (!route && path === '/admin/importacoes') ? '/admin/importacoes' :
-    route || 'admin';
+  const current = route === 'editar' ? 'admin' :
+    route === 'importar' || route === 'pdf' || (!route && path === '/admin/importacoes') ? '/admin/importacoes' :
+    route || 'painel';
   const item = ([label, target, icon]) => {
     const href = target.startsWith('/') ? target : '/#' + target;
     return '<a class="workspace-link" href="' + href + '"' + (current === target ? ' aria-current="page"' : '') +
       '><span class="workspace-icon" aria-hidden="true">' + icon + '</span><span>' + label + '</span></a>';
   };
   const operations = [
-    ['Meus imóveis','admin','⌂'], ['CRM','crm','◎'], ['Novo imóvel','editar','+'],
-    ['Importações','/admin/importacoes','⇧'], ['Tratar PDF','pdf','▤']
+    ['Visão geral','painel','⌂'], ['Imóveis','admin','▦'], ['CRM','crm','◎'],
+    ['Importações','/admin/importacoes','⇧']
   ];
   const management = [
-    ['Usuários','usuarios','♙'], ['Configurações','configuracoes','⚙'], ['Menu da vitrine','menu','≡']
+    ['Gestão de locações','locacoes','▦'], ['Usuários','usuarios','♙'], ['Configurações','configuracoes','⚙'], ['Menu da vitrine','menu','≡']
   ];
-  return '<aside class="workspace-sidebar"><div class="workspace-top"><a href="/#admin" class="workspace-brand"><span aria-hidden="true">A</span> AdministraçãoImóveis</a>' +
+  return '<aside class="workspace-sidebar"><div class="workspace-top"><a href="/#painel" class="workspace-brand"><span aria-hidden="true">A</span> AdministraçãoImóveis</a>' +
     '<button class="alt" id="workspace-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="false">Menu</button></div>' +
     '<nav id="workspace-navigation" aria-label="Painel administrativo"><p>Operação</p>' + operations.map(item).join('') +
     (session?.administrator ? '<p>Administração</p>' + management.map(item).join('') : '') +
@@ -92,4 +92,32 @@ export function login(render) {
     try { await request('/api/admin/login', 'POST', Object.fromEntries(new FormData(event.target))); render(); }
     catch (error) { report(error.status === 401 ? 'Usuário ou senha incorretos.' : error.message); }
   };
+}
+
+export function sectionNav(items) {
+  return '<nav class="workspace-sections" aria-label="Seções">'+items.map(([key,label]) =>
+    '<button class="alt" type="button" data-section="'+key+'" aria-controls="'+key+'">'+label+'</button>').join('')+'</nav>';
+}
+
+export function bindSections(nav, initial, container = app) {
+  const buttons = [...nav.querySelectorAll('[data-section]')];
+  const panels = buttons.map(button => container.querySelector('#'+button.dataset.section));
+  const select = key => {
+    if (!buttons.some(button => button.dataset.section === key)) key = buttons[0].dataset.section;
+    buttons.forEach((button,index) => {
+      const active = button.dataset.section === key;
+      button.setAttribute('aria-pressed',String(active));
+      panels[index].hidden = !active;
+    });
+    return key;
+  };
+  for (const button of buttons) button.onclick = () => select(button.dataset.section);
+  select(initial);
+  return select;
+}
+
+export async function closePropertyOffer(propertyId, operation) {
+  const path = '/api/admin/imoveis/'+encodeURIComponent(propertyId)+'/disponibilidade';
+  const state = await request(path);
+  await request(path+'/'+operation,'PUT',{availability:'closed',version:state.version});
 }

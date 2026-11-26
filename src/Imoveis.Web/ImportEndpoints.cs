@@ -4,7 +4,7 @@ using Npgsql;
 record ImportModel(string Source, string[] Mapping);
 record ImportLookup(string Source, string[] Codes);
 record ImportRow(Guid? Id, PropertyInput Data);
-record ImportBatch(string Source, string Filename, ImportRow[] Rows, byte[]? OriginalFile = null);
+record ImportBatch(string Source, string Filename, ImportRow[] Rows, byte[]? OriginalFile = null, bool PricesOnly = false);
 record ImportHistory(long Id, string Source, string Filename, int Count, DateTime CreatedAt, bool HasOriginal);
 record SavedImportModel(string Signature, string Source, int MappedFields, DateTime UpdatedAt);
 
@@ -123,13 +123,48 @@ static class ImportEndpoints
             {
                 await using var connection = await db.OpenConnectionAsync(ct);
                 await using var transaction = await connection.BeginTransactionAsync(ct);
+                await using var history = new NpgsqlCommand("""
+                    INSERT INTO import_history(tenant_id,source,filename,imported,original_file) VALUES(@tenant,@source,@filename,@imported,@original) RETURNING id
+                    """, connection, transaction);
+                history.Parameters.AddWithValue("tenant", tenant.Id);
+                history.Parameters.AddWithValue("source", source);
+                history.Parameters.AddWithValue("filename", input.Filename);
+                history.Parameters.AddWithValue("imported", input.Rows.Length);
+                history.Parameters.AddWithValue("original", NpgsqlTypes.NpgsqlDbType.Bytea, (object?)input.OriginalFile ?? DBNull.Value);
+                var importId = (long)(await history.ExecuteScalarAsync(ct))!;
+                await using var context = new NpgsqlCommand(
+                    "SELECT set_config('imoveis.import_id', @id, true)", connection, transaction);
+                context.Parameters.AddWithValue("id", importId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                await context.ExecuteNonQueryAsync(ct);
                 foreach (var row in input.Rows.OrderBy(row => row.Id ?? Guid.Empty))
                 {
                     var data = row.Data with { Source = source };
+                    if (input.PricesOnly)
+                    {
+                        if (row.Id is not { } propertyId || string.IsNullOrWhiteSpace(data.Code)
+                            || data.Code.Length > 80 || data.Price is <= 0 or >= 10000000000000m
+                            || decimal.Round(data.Price, 2) != data.Price || !codes.Add(data.Code.Trim()))
+                            return Results.BadRequest("Informe imóveis existentes, com códigos únicos e preços válidos.");
+                        await using var updatePrice = new NpgsqlCommand("""
+                            UPDATE properties SET price=@price, version=version+1
+                            WHERE id=@id AND tenant_id=@tenant AND version=@version
+                              AND lower(source)=lower(@source) AND lower(code)=lower(@code)
+                              AND price IS DISTINCT FROM @price
+                            """, connection, transaction);
+                        updatePrice.Parameters.AddWithValue("price", data.Price);
+                        updatePrice.Parameters.AddWithValue("id", propertyId);
+                        updatePrice.Parameters.AddWithValue("tenant", tenant.Id);
+                        updatePrice.Parameters.AddWithValue("version", data.Version);
+                        updatePrice.Parameters.AddWithValue("source", source);
+                        updatePrice.Parameters.AddWithValue("code", data.Code.Trim());
+                        if (await updatePrice.ExecuteNonQueryAsync(ct) != 1)
+                            return Results.Conflict("Um preço ou cadastro mudou. Gere a prévia novamente.");
+                        continue;
+                    }
                     if (row.Id is { } id)
                     {
                         await using var current = new NpgsqlCommand("""
-                            SELECT code,status,album,category_id,notes FROM properties
+                            SELECT code,status,album,category_id,notes,rental FROM properties
                             WHERE id=@id AND tenant_id=@tenant AND version=@version AND lower(source)=lower(@source) FOR UPDATE
                             """, connection, transaction);
                         current.Parameters.AddWithValue("tenant", tenant.Id);
@@ -142,24 +177,16 @@ static class ImportEndpoints
                         data = data with { Code = reader.GetString(0), Status = reader.GetString(1),
                             Album = reader.IsDBNull(2) ? null : reader.GetString(2),
                             CategoryId = reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                            Rental = reader.IsDBNull(5) ? null : JsonSerializer.Deserialize<RentalTerms>(reader.GetString(5)),
                             Notes = string.IsNullOrWhiteSpace(data.Notes) ? (reader.IsDBNull(4) ? null : reader.GetString(4)) : data.Notes };
                     }
-                    else data = data with { Status = "Rascunho", Album = null, Version = 0, CategoryId = null };
+                    else data = data with { Status = "Rascunho", Album = null, Version = 0, CategoryId = null, Rental = null };
 
                     if (validate(data) is { } error) return Results.BadRequest(error);
                     if (!codes.Add(data.Code.Trim())) return Results.BadRequest("O lote tem códigos repetidos.");
                     if (!await PropertyStore.Save(row.Id ?? Guid.NewGuid(), data, row.Id is null, connection, transaction, ct, tenant.Id))
                         return Results.Conflict("Um imóvel mudou. Gere a prévia novamente antes de importar.");
                 }
-                await using var history = new NpgsqlCommand("""
-                    INSERT INTO import_history(tenant_id,source,filename,imported,original_file) VALUES(@tenant,@source,@filename,@imported,@original)
-                    """, connection, transaction);
-                history.Parameters.AddWithValue("tenant", tenant.Id);
-                history.Parameters.AddWithValue("source", source);
-                history.Parameters.AddWithValue("filename", input.Filename);
-                history.Parameters.AddWithValue("imported", input.Rows.Length);
-                history.Parameters.AddWithValue("original", NpgsqlTypes.NpgsqlDbType.Bytea, (object?)input.OriginalFile ?? DBNull.Value);
-                await history.ExecuteNonQueryAsync(ct);
                 await transaction.CommitAsync(ct);
                 return Results.Ok(new { count = input.Rows.Length });
             }

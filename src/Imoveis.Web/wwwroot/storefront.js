@@ -1,4 +1,5 @@
-import {app, escape, money} from './ui.js';
+import {listingPrice} from './rental.js';
+import {app, escape} from './ui.js';
 import {storefrontTheme} from './storefront-theme.js';
 import {catalogRequest, catalogMedia, catalogPhoto, storefrontHref, storefrontLink} from './public-catalog.js';
 import {kindSelect} from './property-kinds.js';
@@ -30,7 +31,7 @@ function listingCard(home) {
     (d.kind ? '<p class="listing-kind">' + escape(d.kind) + '</p>' : '') +
     '<h3>' + escape(d.title) + '</h3>' +
     (place ? '<p class="listing-location">' + place + '</p>' : '') + '</div></div>' +
-    '<div class="listing-body"><div class="listing-property-data"><strong>' + money(d.price) + '</strong>' +
+    '<div class="listing-body"><div class="listing-property-data"><strong>' + listingPrice(d) + '</strong>' +
     (features.length ? '<ul class="listing-facts">' + features.map(value => '<li>' + value + '</li>').join('') + '</ul>' : '') +
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }

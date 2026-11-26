@@ -11,6 +11,7 @@ const {chromium} = require('playwright');
     await page.locator('#login input[name=password]').fill(password);
     await page.getByRole('button',{name:'Entrar',exact:true}).click();
     await page.getByRole('link',{name:'CRM',exact:true}).click();
+    await page.getByText('Novo contato',{exact:true}).click();
     const form = page.locator('#lead-new');
     await form.locator('[name=name]').fill('Contato navegador');
     await form.locator('[name=assignedTo]').selectOption({label:'admin'});
@@ -22,7 +23,7 @@ const {chromium} = require('playwright');
     await lead.waitFor();
     await lead.locator('[name=status]').selectOption('visit');
     await lead.getByRole('button',{name:'Salvar'}).click();
-    await lead.getByText('Histórico de etapas').click();
+    await lead.getByText('Histórico de atendimento').click();
     await lead.locator('ol').getByText(/Visita/).waitFor();
     const fixture = await page.request.post(base+'/api/admin/crm/leads',{
       headers:{'X-Imoveis-Action':'1'},
@@ -33,6 +34,7 @@ const {chromium} = require('playwright');
     const filters = page.locator('#crm-filters');
     await filters.locator('[name=queue]').selectOption('true');
     await filters.getByRole('button',{name:'Aplicar filtros'}).click();
+    await page.locator('.crm-inbox-item').filter({hasText:'Contato da fila'}).click();
     const queued = page.locator('.crm-lead').filter({hasText:'Contato da fila'});
     await queued.getByText('Chegou agora').waitFor();
     assert.equal(await lead.count(),0);

@@ -3,9 +3,12 @@ using System.Security.Claims;
 
 record LeadInput(Guid? PropertyId, string Name, string? Email, string? Phone, string Status, Guid? AssignedTo, string? Notes);
 record LeadView(Guid Id, Guid? PropertyId, string Name, string? Email, string? Phone,
-    string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt, string? PropertyCode, string? PropertyTitle);
+    string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt, string? PropertyCode, string? PropertyTitle,
+    string? RequestKind, DateOnly? PreferredVisitDate, string? ProposalOperation, decimal? ProposedPrice, DateTime UpdatedAt);
 
-record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt);
+record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt, string? Action, decimal? CounterofferPrice);
+
+record LeadNegotiation(string Action, decimal? Price);
 
 static class LeadEndpoints
 {
@@ -26,7 +29,8 @@ static class LeadEndpoints
                 (assignee is not (null or "" or "unassigned") && !Guid.TryParse(assignee, out assigneeId)))
                 return Results.BadRequest("Confira os filtros e a paginação.");
             await using var command = db.CreateCommand("""
-                SELECT l.id,l.property_id,l.name,l.email,l.phone,l.status,l.assigned_to,l.notes,l.created_at,p.code,p.title
+                SELECT l.id,l.property_id,l.name,l.email,l.phone,l.status,l.assigned_to,l.notes,l.created_at,p.code,p.title,
+                       l.request_kind,l.preferred_visit_date,l.proposal_operation,l.proposed_price,l.updated_at
                 FROM saas_leads l LEFT JOIN properties p ON p.tenant_id=l.tenant_id AND p.id=l.property_id
                 WHERE l.tenant_id=@tenant AND (@status='' OR l.status=@status)
                   AND (@assignee='' OR (@assignee='unassigned' AND l.assigned_to IS NULL) OR l.assigned_to=@assigneeId)
@@ -52,7 +56,9 @@ static class LeadEndpoints
                     reader.IsDBNull(4)?null:reader.GetString(4),reader.GetString(5),
                     reader.IsDBNull(6)?null:reader.GetGuid(6),
                     reader.IsDBNull(7)?null:reader.GetString(7),reader.GetDateTime(8),
-                    reader.IsDBNull(9)?null:reader.GetString(9),reader.IsDBNull(10)?null:reader.GetString(10)));
+                    reader.IsDBNull(9)?null:reader.GetString(9),reader.IsDBNull(10)?null:reader.GetString(10),
+                    reader.IsDBNull(11)?null:reader.GetString(11), reader.IsDBNull(12)?null:reader.GetFieldValue<DateOnly>(12),
+                    reader.IsDBNull(13)?null:reader.GetString(13),reader.IsDBNull(14)?null:reader.GetDecimal(14),reader.GetDateTime(15)));
             return Results.Ok(leads);
         });
         group.MapPost("", async (LeadInput input, ClaimsPrincipal user, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
@@ -103,10 +109,33 @@ static class LeadEndpoints
             return await command.ExecuteScalarAsync(ct) is true
                 ? Results.NoContent() : Results.NotFound();
         });
+        group.MapPost("/{id:guid}/negociacao", async (Guid id, LeadNegotiation input, ClaimsPrincipal user,
+            NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
+        {
+            if (input.Action is not ("counteroffer" or "accepted" or "declined" or "visit-confirmed") ||
+                (input.Action == "counteroffer" && (input.Price is not { } price || price is <= 0 or >= 10000000000000m
+                    || decimal.Round(price, 2) != price)))
+                return Results.BadRequest("Confira a ação e o valor da contraproposta.");
+            await using var command = db.CreateCommand("""
+                INSERT INTO saas_lead_stage_history (tenant_id,lead_id,changed_by,status,action,counteroffer_price)
+                SELECT tenant_id,id,@actor,status,@action,@price
+                FROM saas_leads
+                WHERE tenant_id=@tenant AND id=@id
+                  AND ((request_kind='visit' AND @action='visit-confirmed')
+                    OR (request_kind='proposal' AND @action IN ('counteroffer','accepted','declined')))
+                """);
+            command.Parameters.AddWithValue("tenant", tenant.Id);
+            command.Parameters.AddWithValue("id", id);
+            command.Parameters.AddWithValue("actor", Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!));
+            command.Parameters.AddWithValue("action", input.Action);
+            command.Parameters.AddWithValue("price", NpgsqlTypes.NpgsqlDbType.Numeric,
+                input.Action == "counteroffer" ? (object?)input.Price ?? DBNull.Value : DBNull.Value);
+            return await command.ExecuteNonQueryAsync(ct) == 1 ? Results.NoContent() : Results.NotFound();
+        });
         group.MapGet("/{id:guid}/historico", async (Guid id, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             await using var command = db.CreateCommand("""
-                SELECT event.status, staff.username, event.created_at
+                SELECT event.status, staff.username, event.created_at, event.action, event.counteroffer_price
                 FROM saas_leads lead
                 LEFT JOIN saas_lead_stage_history event ON event.tenant_id=lead.tenant_id AND event.lead_id=lead.id
                 LEFT JOIN staff_users staff ON staff.tenant_id=event.tenant_id AND staff.id=event.changed_by
@@ -120,7 +149,8 @@ static class LeadEndpoints
             var events = new List<LeadStageEvent>();
             do
             {
-                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.IsDBNull(1) ? "Vitrine" : reader.GetString(1), reader.GetDateTime(2)));
+                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.IsDBNull(1) ? "Vitrine" : reader.GetString(1), reader.GetDateTime(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetDecimal(4)));
             } while (await reader.ReadAsync(ct));
             return Results.Ok(events);
         });

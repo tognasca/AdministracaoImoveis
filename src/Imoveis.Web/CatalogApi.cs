@@ -136,10 +136,10 @@ static class CatalogApi
     {
         var data = property.Data;
         return new(property.Id, data.Code, data.Title, data.Kind, data.City, data.District, data.Zone,
-            data.Price, data.Bedrooms, data.Size, property.Photos.Select(photo => $"/api/v1/catalogo/imoveis/{property.Id}/fotos/{photo}").ToArray());
+            data.Price, data.Bedrooms, data.Size, property.Photos.Select(photo => $"/api/v1/catalogo/imoveis/{property.Id}/fotos/{photo}").ToArray(), data.Rental);
     }
 
     private sealed record CatalogPage(int Page, int PageSize, CatalogProperty[] Properties);
     private sealed record CatalogProperty(Guid Id, string Code, string Title, string Kind, string City,
-        string District, string? Zone, decimal Price, int Bedrooms, decimal Size, string[] Photos);
+        string District, string? Zone, decimal Price, int Bedrooms, decimal Size, string[] Photos, RentalTerms? Rental);
 }
