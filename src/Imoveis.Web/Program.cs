@@ -18,6 +18,7 @@ ModelHeroes.Map(admin);
 StaticStorefrontPackage.Map(admin);
 SaasAdministrationEndpoints.Map(app);
 LeadEndpoints.Map(admin);
+OlxEndpoints.Map(app, admin);
 DashboardEndpoints.Map(admin);
 MenuEndpoints.Map(admin);
 ImportEndpoints.Map(admin, PropertyValidation.Validate);

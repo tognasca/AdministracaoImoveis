@@ -3,7 +3,7 @@ using System.Security.Claims;
 
 record LeadInput(Guid? PropertyId, string Name, string? Email, string? Phone, string Status, Guid? AssignedTo, string? Notes);
 record LeadView(Guid Id, Guid? PropertyId, string Name, string? Email, string? Phone,
-    string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt, string? PropertyCode, string? PropertyTitle);
+    string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt, string? PropertyCode, string? PropertyTitle, DateTime? FirstContactAt, DateTime? VisitAt, string? VisitState);
 
 record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt);
 
@@ -16,7 +16,7 @@ static class LeadEndpoints
         group.MapGet("/responsaveis", async (StaffStore staff, TenantContext tenant, CancellationToken ct) =>
             (await staff.List(ct, tenant.Id)).Where(user => user.Active)
                 .Select(user => new { user.Id, user.Username }));
-        group.MapGet("", async (NpgsqlDataSource db, TenantContext tenant, string? status, string? q, string? assignee, bool? queue,
+        group.MapGet("", async (NpgsqlDataSource db, TenantContext tenant, string? status, string? q, string? assignee, bool? queue, bool? today,
             int? offset, int? limit, CancellationToken ct) =>
         {
             if (!string.IsNullOrEmpty(status) && !Statuses.Contains(status)) return Results.BadRequest("Etapa inválida.");
@@ -26,11 +26,14 @@ static class LeadEndpoints
                 (assignee is not (null or "" or "unassigned") && !Guid.TryParse(assignee, out assigneeId)))
                 return Results.BadRequest("Confira os filtros e a paginação.");
             await using var command = db.CreateCommand("""
-                SELECT l.id,l.property_id,l.name,l.email,l.phone,l.status,l.assigned_to,l.notes,l.created_at,p.code,p.title
+                SELECT l.id,l.property_id,l.name,l.email,l.phone,l.status,l.assigned_to,l.notes,l.created_at,p.code,p.title,l.first_contact_at,l.visit_at,l.visit_state
                 FROM saas_leads l LEFT JOIN properties p ON p.tenant_id=l.tenant_id AND p.id=l.property_id
                 WHERE l.tenant_id=@tenant AND (@status='' OR l.status=@status)
                   AND (@assignee='' OR (@assignee='unassigned' AND l.assigned_to IS NULL) OR l.assigned_to=@assigneeId)
                   AND (NOT @queue OR (l.status='new' AND l.assigned_to IS NULL))
+                  AND (NOT @today OR (l.visit_state IN ('scheduled','confirmed')
+                      AND (l.visit_at AT TIME ZONE 'America/Sao_Paulo')::date =
+                          (now() AT TIME ZONE 'America/Sao_Paulo')::date))
                   AND (@search='' OR concat_ws(' ',l.name,l.email,l.phone,p.code,p.title) ILIKE @pattern ESCAPE '!')
                 ORDER BY CASE WHEN @queue THEN l.created_at END ASC, l.created_at DESC, l.id
                 LIMIT @limit OFFSET @offset
@@ -40,6 +43,7 @@ static class LeadEndpoints
             command.Parameters.AddWithValue("assignee", assignee ?? "");
             command.Parameters.AddWithValue("assigneeId", assigneeId);
             command.Parameters.AddWithValue("queue", queue == true);
+            command.Parameters.AddWithValue("today", today == true);
             command.Parameters.AddWithValue("search", search);
             command.Parameters.AddWithValue("pattern", "%" + search.Replace("!", "!!").Replace("%", "!%").Replace("_", "!_") + "%");
             command.Parameters.AddWithValue("limit", limit ?? 200);
@@ -52,7 +56,9 @@ static class LeadEndpoints
                     reader.IsDBNull(4)?null:reader.GetString(4),reader.GetString(5),
                     reader.IsDBNull(6)?null:reader.GetGuid(6),
                     reader.IsDBNull(7)?null:reader.GetString(7),reader.GetDateTime(8),
-                    reader.IsDBNull(9)?null:reader.GetString(9),reader.IsDBNull(10)?null:reader.GetString(10)));
+                    reader.IsDBNull(9)?null:reader.GetString(9),reader.IsDBNull(10)?null:reader.GetString(10),
+                    reader.IsDBNull(11)?null:reader.GetDateTime(11),reader.IsDBNull(12)?null:reader.GetDateTime(12),
+                    reader.IsDBNull(13)?null:reader.GetString(13)));
             return Results.Ok(leads);
         });
         group.MapPost("", async (LeadInput input, ClaimsPrincipal user, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
@@ -103,6 +109,63 @@ static class LeadEndpoints
             return await command.ExecuteScalarAsync(ct) is true
                 ? Results.NoContent() : Results.NotFound();
         });
+        group.MapPost("/{id:guid}/assumir", async (Guid id, ClaimsPrincipal user, NpgsqlDataSource db,
+            TenantContext tenant, CancellationToken ct) =>
+        {
+            await using var command = db.CreateCommand("""
+                UPDATE saas_leads SET assigned_to=@actor,updated_at=now()
+                WHERE tenant_id=@tenant AND id=@id AND assigned_to IS NULL AND status='new'
+                """);
+            BindAction(command,id,tenant,user);
+            return await command.ExecuteNonQueryAsync(ct)==1 ? Results.NoContent() :
+                Results.Conflict("Este contato já saiu da fila. Atualize a lista.");
+        });
+        group.MapPost("/{id:guid}/primeiro-contato", async (Guid id, ClaimsPrincipal user, NpgsqlDataSource db,
+            TenantContext tenant, CancellationToken ct) =>
+        {
+            await using var command = db.CreateCommand("""
+                WITH changed AS (
+                    UPDATE saas_leads SET first_contact_at=now(),status='contacted',updated_at=now()
+                    WHERE tenant_id=@tenant AND id=@id AND assigned_to=@actor AND status='new'
+                    RETURNING id
+                )
+                INSERT INTO saas_lead_stage_history(tenant_id,lead_id,changed_by,status)
+                SELECT @tenant,id,@actor,'contacted' FROM changed
+                """);
+            BindAction(command,id,tenant,user);
+            return await command.ExecuteNonQueryAsync(ct)==1 ? Results.NoContent() :
+                Results.Conflict("Assuma o contato novo antes de registrar o atendimento.");
+        });
+        group.MapPut("/{id:guid}/visita", async (Guid id, VisitInput input, ClaimsPrincipal user, NpgsqlDataSource db,
+            TenantContext tenant, CancellationToken ct) =>
+        {
+            if (input.State is not ("scheduled" or "confirmed" or "cancelled") ||
+                (input.State == "scheduled" && (input.At is null || input.At <= DateTimeOffset.UtcNow)))
+                return Results.BadRequest("Selecione uma data futura válida para a visita.");
+            await using var command = db.CreateCommand("""
+                WITH previous AS (
+                    SELECT id,status FROM saas_leads WHERE tenant_id=@tenant AND id=@id
+                    AND assigned_to=@actor AND property_id IS NOT NULL AND status NOT IN ('won','lost')
+                    AND (@state='scheduled' OR visit_state IN ('scheduled','confirmed')) FOR UPDATE
+                ), changed AS (
+                    UPDATE saas_leads l SET visit_at=coalesce(@at,l.visit_at),visit_state=@state,
+                      status=CASE WHEN @state='cancelled' AND previous.status='visit' THEN 'contacted'
+                                  WHEN @state='scheduled' THEN 'visit' ELSE previous.status END,updated_at=now()
+                    FROM previous WHERE l.id=previous.id
+                    RETURNING l.id,l.status,previous.status AS old_status
+                ), recorded AS (
+                    INSERT INTO saas_lead_stage_history(tenant_id,lead_id,changed_by,status)
+                    SELECT @tenant,id,@actor,status FROM changed WHERE status<>old_status
+                )
+                SELECT EXISTS(SELECT 1 FROM changed)
+                """);
+            BindAction(command,id,tenant,user);
+            command.Parameters.AddWithValue("state",input.State);
+            command.Parameters.AddWithValue("at",NpgsqlTypes.NpgsqlDbType.TimestampTz,
+                input.State == "scheduled" ? (object)input.At!.Value.UtcDateTime : DBNull.Value);
+            return await command.ExecuteScalarAsync(ct) is true ? Results.NoContent() :
+                Results.Conflict("A visita exige um imóvel vinculado e o corretor responsável.");
+        });
         group.MapGet("/{id:guid}/historico", async (Guid id, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             await using var command = db.CreateCommand("""
@@ -124,6 +187,15 @@ static class LeadEndpoints
             } while (await reader.ReadAsync(ct));
             return Results.Ok(events);
         });
+    }
+
+    private sealed record VisitInput(DateTimeOffset? At, string State);
+
+    private static void BindAction(NpgsqlCommand command, Guid id, TenantContext tenant, ClaimsPrincipal user)
+    {
+        command.Parameters.AddWithValue("id",id);
+        command.Parameters.AddWithValue("tenant",tenant.Id);
+        command.Parameters.AddWithValue("actor",Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!));
     }
 
     private static string? Validate(LeadInput input)
