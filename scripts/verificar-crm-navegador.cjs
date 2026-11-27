@@ -79,7 +79,7 @@ const {chromium} = require('playwright');
     await page.getByRole('button',{name:'Sair',exact:true}).click();
     await page.getByRole('heading',{name:'Acesso administrativo'}).waitFor();
     assert.equal((await page.request.get(base+'/api/admin/session')).status(),401);
-    const docs = await page.context().newPage();
+    const docs = await browser.newPage();
     await docs.goto(base+'/docs/catalogo/index.html');
     await docs.locator('.swagger-ui .opblock').first().waitFor();
     const cssApplied = await docs.locator('.swagger-ui').evaluate(node =>
