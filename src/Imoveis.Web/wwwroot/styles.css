@@ -494,3 +494,21 @@ td input,td select { min-width: 140px; }
   .crm-split { grid-template-columns:minmax(0,1fr); gap:0; }
   .crm-inbox { max-height:34vh; overflow:auto; }
 }
+
+/* Form rhythm for the administrative workspace. */
+.workspace .box form:not([hidden]):not(.admin-catalog-filters):not(.filter-bar),
+.workspace form.box:not([hidden]):not(.admin-catalog-filters):not(.filter-bar) {
+  display:grid; gap:14px; align-content:start;
+}
+.workspace form > button:not([hidden]) { justify-self:start; }
+.workspace form > label + button,
+.workspace #hero-property > label + button,
+.workspace .crm-property-find { margin-block:8px; }
+.workspace form > .row { margin-block:0; }
+.workspace .admin-catalog-filters { gap:12px; }
+.workspace .admin-metric { border-inline-start:3px solid var(--forest); }
+.workspace .admin-metric-icon[class*="tone-"] { background:var(--quiet); color:var(--forest); }
+.workspace .admin-panel { box-shadow:0 6px 20px #161a1409; }
+.workspace .admin-task-list li { padding-block:14px; }
+.workspace .admin-property-table tbody tr:hover { background:var(--quiet); }
+.workspace .admin-property-actions a + a { margin-top:4px; }

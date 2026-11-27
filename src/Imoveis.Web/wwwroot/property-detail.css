@@ -2,8 +2,8 @@
 .property-page .estate-back { display: inline-block; margin-bottom: 14px; }
 .property-heading {
   display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap;
-  gap: 8px 24px; margin-bottom: 14px; padding: 10px clamp(12px, 1.6vw, 18px);
-  border-radius: 4px; background: var(--estate-accent); color: var(--estate-on-accent);
+  gap: 8px 24px; margin-bottom: 14px; padding: 4px 0 16px;
+  border-block-end: 1px solid var(--estate-rule); background: transparent; color: var(--estate-ink);
 }
 .property-heading h1 { font: 400 clamp(1.55rem, 2.5vw, 2.2rem)/1.14 var(--property-serif); margin: 0 0 4px; overflow-wrap: anywhere; }
 .property-heading .estate-kicker { margin: 0 0 4px; color: inherit; letter-spacing: .12em; }
@@ -11,7 +11,7 @@
 .property-reference { letter-spacing: .06em; overflow-wrap: anywhere; }
 .property-layout { display: grid; grid-template-columns: minmax(0, 2.18fr) minmax(260px, 1fr); gap: clamp(14px, 2vw, 24px); align-items: start; grid-template-areas: "gallery inquiry" "features inquiry"; }
 .property-gallery { grid-area: gallery; min-width: 0; }
-.property-photo-stage, .property-photo-empty { position: relative; aspect-ratio: 1.9; max-height: 380px; background: #dedcd0; border-radius: 5px; overflow: hidden; }
+.property-photo-stage, .property-photo-empty { position: relative; aspect-ratio: 1.9; max-height: 380px; background: #dedcd0; border-radius: 14px; overflow: hidden; }
 .property-photo-stage > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .property-photo-empty { display: grid; place-items: center; color: #625d56; }
 .property-expand, .property-photo-count {
@@ -26,7 +26,7 @@
 .property-thumbnails img { display: block; width: 100%; aspect-ratio: 1.65; object-fit: cover; }
 .property-inquiry {
   grid-area: inquiry; position: sticky; top: 24px; min-width: 0; border: 1px solid var(--property-panel-rule);
-  border-top: 3px solid var(--estate-accent); padding: clamp(14px, 1.7vw, 21px); background: var(--property-panel); color: var(--property-panel-ink);
+  border-radius: 16px; box-shadow: 0 16px 40px #0002; border-top: 3px solid var(--estate-accent); padding: clamp(14px, 1.7vw, 21px); background: var(--property-panel); color: var(--property-panel-ink);
 }
 .property-price p { color: #625d56; font-size: .73rem; letter-spacing: .12em; text-transform: uppercase; }
 .property-price strong { display: block; font: 400 clamp(1.2rem, 1.75vw, 1.55rem)/1.15 var(--property-serif); overflow-wrap: anywhere; }
@@ -36,10 +36,10 @@
 .property-characteristics h2 { font-size: clamp(1.35rem, 2vw, 1.75rem); }
 .property-characteristics dl {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 135px), 1fr));
-  margin: 0; gap: 1px; background: var(--estate-rule); border: 1px solid var(--estate-rule);
+  margin: 0; gap: 8px;
 }
-.property-characteristics dl > div { min-width: 0; background: var(--property-panel); color: var(--property-panel-ink); padding: 10px; }
-.property-characteristics dt { font-size: .78rem; color: #625d56; margin-bottom: 4px; }
+.property-characteristics dl > div { min-width: 0; color: var(--estate-ink); padding: 10px 12px; border: 1px solid var(--estate-rule); border-radius: 9px; }
+.property-characteristics dt { font-size: .78rem; color: inherit; margin-bottom: 4px; }
 .property-characteristics dd { font-weight: 600; margin: 0; overflow-wrap: anywhere; }
 .property-lightbox { width: min(1080px, calc(100% - 24px)); max-height: 94dvh; padding: 12px; border: 0; color: white; background: #171613; }
 .property-lightbox::backdrop { background: #0d0c0be8; }
@@ -52,11 +52,11 @@
   .property-inquiry { position: static; }
 }
 
-.property-contact-form { display: grid; gap: 10px; margin-top: 12px; border-top: 1px solid var(--property-panel-rule); padding-top: 12px; }
+.property-contact-form { display: grid; gap: 14px; margin-top: 16px; border-top: 1px solid var(--property-panel-rule); padding-top: 12px; }
 .property-contact-form h2 { font-size: 1.2rem; margin: 0; }
 .property-contact-form .row, .property-tools.row { margin-block: 6px; }
 .property-inquiry .estate-contact .alt { color: var(--property-panel-ink); border-color: var(--property-panel-rule); }
-.property-inquiry :is(input, select, textarea) { color: var(--property-panel-ink); background: #fff; }
+.property-inquiry :is(input, select, textarea) { color: var(--property-panel-ink); background: #fff; border-color: var(--property-panel-rule); }
 .property-contact-form textarea { resize: vertical; }
 .property-contact-form .estate-contact { border: 0; padding: 0; margin: 2px 0 0; }
 .property-contact-form .estate-contact .btn { justify-content: center; text-align: center; }
@@ -76,6 +76,24 @@
 .property-similar { margin-top:clamp(28px,5vw,58px); }
 .property-similar h2 { font-size:clamp(1.75rem,3vw,2.6rem); margin-bottom:20px; }
 
-.estate-site .property-heading { background:var(--estate-panel); color:var(--estate-ink); padding:clamp(16px,3vw,36px); border:1px solid var(--estate-rule); border-radius:12px; }
-.estate-site .property-inquiry,.estate-site .property-characteristics dl > div { background:var(--estate-surface); }
-.estate-site .property-price p,.estate-site .property-characteristics dt { color:inherit; opacity:.84; }
+.property-area-link {
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap;
+  gap:8px 16px; margin-bottom:22px; padding:14px 16px;
+  background:var(--estate-surface); color:var(--estate-ink);
+  border:1px solid var(--estate-rule); border-radius:10px; text-decoration:none;
+}
+.property-area-link small { display:block; font-size:.78rem; }
+.property-area-link:hover > span:last-child { text-decoration:underline; }
+.property-contact-form fieldset:not([hidden]) {
+  display:grid; gap:12px; min-width:0; margin:0; padding:12px;
+  border:1px solid var(--property-panel-rule); border-radius:8px;
+}
+.property-contact-form fieldset p { margin:0; }
+.property-contact-form [role=status]:empty,
+#property-action-status:empty { display:none; }
+.property-price dl { display:grid; gap:6px; margin:10px 0 14px; }
+.property-price dl > div { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.property-price dd { margin:0; }
+@media (max-width:760px) {
+  .property-layout { grid-template-areas:"gallery" "features" "inquiry"; }
+}

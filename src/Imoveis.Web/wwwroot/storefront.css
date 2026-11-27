@@ -73,7 +73,7 @@
 .estate-banner img { position:absolute; inset:0; display:block; width:100%; height:100%; object-fit:cover; }
 .estate-hero-copy { grid-area:intro; min-width:0; align-self:center; padding:clamp(28px,6vw,98px); }
 .estate-hero-brand { margin-bottom:16px; font-size:.77rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; overflow-wrap:anywhere; }
-.estate-hero h1 { font-size:clamp(2.65rem,5.55vw,6.9rem); line-height:.98; margin:0; max-width:12ch; overflow-wrap:anywhere; }
+.estate-hero h1 { font-size:clamp(2.3rem,4.6vw,5rem); line-height:.98; margin:0; max-width:12ch; overflow-wrap:anywhere; }
 .estate-hero-link { display:inline-flex; align-items:center; min-height:44px; gap:12px; margin-top:22px; font-weight:650; font-size:.9rem; text-underline-offset:5px; }
 .estate-kicker { color:var(--estate-ink); font-size:.72rem; font-weight:700; letter-spacing:.15em; text-transform:uppercase; }
 .estate-site h1,.estate-site h2,.listing-card h3 { font-family:var(--estate-display); font-weight:400; letter-spacing:-.035em; }
@@ -198,8 +198,8 @@
 
 /* Model-specific composition with the same real catalog and banner settings. */
 .estate-site[data-estate-template="premium"] {
-  --estate-paper:#191715; --estate-ink:#f6ebdc; --estate-rule:#554a3d;
-  --estate-panel:#241d17; --estate-surface:#2a231d;
+  --estate-paper:#171c1d; --estate-ink:#f7f0e3; --estate-rule:#494943;
+  --estate-panel:#242829; --estate-surface:#222728;
 }
 .estate-site[data-estate-template="premium"] .estate-hero:not(.estate-hero-plain) {
   grid-template-areas:"intro intro"; grid-template-columns:minmax(0,1fr);
@@ -210,7 +210,7 @@
 }
 .estate-site[data-estate-template="premium"] .estate-hero { position:relative; }
 .estate-site[data-estate-template="premium"] .estate-banner::after {
-  content:""; position:absolute; inset:0; background:linear-gradient(90deg,#1b140fe8,#1b140f75 64%,#1b140f20);
+  content:""; position:absolute; inset:0; background:linear-gradient(90deg,#11191be8,#11191b75 64%,#11191b20);
 }
 .estate-site[data-estate-template="minimal"] { --estate-paper:#fff; --estate-ink:#26221e; --estate-panel:#f5f2eb; --estate-surface:#fff; --estate-rule:#ded8cb; }
 .estate-site[data-estate-template="modern"] { --estate-paper:#f8f5ee; --estate-ink:#2e2720; --estate-panel:#ede4d5; --estate-rule:#dcd1c1; }
@@ -229,7 +229,7 @@
 .estate-site .listing-card h3 { font-size:clamp(1.5rem,2.3vw,2.45rem); }
 .estate-site .listing-location { margin:7px 0 10px; }
 .estate-site .listing-facts { color:inherit; opacity:.8; }
-.estate-site .listing-property-data strong { font-weight:700; }
+.estate-site .listing-property-data strong { display:block; margin-top:8px; font-weight:700; }
 .estate-site .listing-link:focus-visible { outline-offset:-4px; }
 @media(min-width:1100px) {
   .estate-site[data-estate-template="commercial"] .estate-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
@@ -270,9 +270,9 @@
 .estate-site .listing-card h3 { font-size: clamp(1.12rem, 1.5vw, 1.45rem); line-height: 1.2; }
 .estate-site .listing-location { margin-top: 5px; }
 .estate-site .listing-body {
-  flex: none;
-  margin-top: auto;
-  padding: 9px 15px 13px;
+  flex: 1;
+  margin-top: 0;
+  padding: 14px 16px 16px;
   border: 0;
   border-radius: 0;
 }
