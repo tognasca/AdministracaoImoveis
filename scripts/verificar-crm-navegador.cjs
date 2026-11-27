@@ -82,9 +82,8 @@ const {chromium} = require('playwright');
     const docs = await browser.newPage();
     await docs.goto(base+'/docs/catalogo/index.html');
     await docs.locator('.swagger-ui .opblock').first().waitFor();
-    const cssApplied = await docs.locator('.swagger-ui').evaluate(node =>
-      getComputedStyle(node).fontFamily.includes('sans-serif'));
-    assert(cssApplied);
+    const stylesheet = docs.locator('link[rel=stylesheet][href$=estilos]');
+    assert(await stylesheet.evaluate(link => link.sheet?.cssRules.length > 0));
     await docs.close();
     console.log('Chromium: prévia real da vitrine, rascunho e tema escuro do painel.');
   } finally {
