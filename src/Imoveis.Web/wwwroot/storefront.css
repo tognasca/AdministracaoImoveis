@@ -212,7 +212,11 @@
 .estate-site[data-estate-template="premium"] .estate-banner::after {
   content:""; position:absolute; inset:0; background:linear-gradient(90deg,#11191be8,#11191b75 64%,#11191b20);
 }
-.estate-site[data-estate-template="minimal"] { --estate-paper:#fff; --estate-ink:#26221e; --estate-panel:#f5f2eb; --estate-surface:#fff; --estate-rule:#ded8cb; }
+.estate-site[data-estate-template="minimal"] {
+  --estate-paper:#faf9f6; --estate-ink:#262522; --estate-panel:#efebe3;
+  --estate-surface:#fff; --estate-rule:#e0dcd3;
+  --minimal-gutter:clamp(16px,5vw,72px);
+}
 .estate-site[data-estate-template="modern"] { --estate-paper:#f8f5ee; --estate-ink:#2e2720; --estate-panel:#ede4d5; --estate-rule:#dcd1c1; }
 .estate-site[data-estate-template="commercial"] { --estate-paper:#f4f4f0; --estate-ink:#242c2b; --estate-panel:#e5e8e2; --estate-rule:#cdd3cb; }
 .estate-site[data-estate-template="commercial"] .estate-hero { grid-template-columns:minmax(0,1fr) minmax(0,1fr); min-height:330px; }
@@ -279,4 +283,36 @@
 .estate-site .listing-card-action span { width: 26px; height: 26px; }
 @media (min-width: 1100px) {
   .estate-site .estate-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* The minimalist hero and search share an outer edge and distinct spacing. */
+.estate-site[data-estate-template="minimal"] .estate-hero {
+  width:calc(100% - var(--minimal-gutter) * 2);
+  max-width:1296px;
+  margin-block-start:clamp(18px,3vw,40px);
+  overflow:hidden;
+  border-radius:16px;
+}
+.estate-site[data-estate-template="minimal"] .estate-hero-copy {
+  padding:clamp(24px,4vw,64px);
+}
+.estate-site[data-estate-template="minimal"] .estate-hero h1 {
+  max-width:16ch;
+  font-size:clamp(2.15rem,3.6vw,3.8rem);
+  line-height:1.08;
+  text-wrap:balance;
+}
+.estate-site[data-estate-template="minimal"] .estate-search-shell {
+  width:calc(100% - var(--minimal-gutter) * 2);
+  max-width:1296px;
+  padding-inline:0;
+  margin-block-start:clamp(20px,3vw,40px);
+}
+.estate-site[data-estate-template="minimal"] .estate-search {
+  gap:16px;
+  border-radius:14px;
+  box-shadow:0 8px 24px #2625220a;
+}
+@media (max-width:700px) {
+  .estate-site[data-estate-template="minimal"] .estate-search { gap:12px; }
 }
