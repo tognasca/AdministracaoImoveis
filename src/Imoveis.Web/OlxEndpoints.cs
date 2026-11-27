@@ -9,6 +9,7 @@ static class OlxEndpoints
     private static readonly XNamespace Ns = "http://www.vivareal.com/schemas/1.0/VRSync";
     private const string Eligible = """
         p.status='Publicado' AND p.price>0 AND p.size>0
+        AND imoveis_offer_visible(p.sale_availability,p.sale_reserved_until)
         AND length(trim(p.title)) BETWEEN 10 AND 100 AND trim(p.city)<>'' AND trim(p.district)<>''
         AND lower(p.kind) IN ('casa','apartamento')
         AND EXISTS (SELECT 1 FROM photos WHERE property_id=p.id)

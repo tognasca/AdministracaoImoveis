@@ -40,7 +40,7 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
   if (!isActive() || version !== renderVersion) return;
   if (!result.length && params.page > 0) return crm(isActive,{...params,page:params.page-1});
   const leads = result.slice(0,pageSize);
-  const columns = params.queue ? stages.slice(0,1) : stages;
+  const selected = leads.find(lead => lead.id === params.selected) ?? leads[0];
   const currentStaff = staff.find(user => user.username === session.username)?.id;
   const visitLabels = {scheduled:'Agendada',confirmed:'Confirmada',cancelled:'Cancelada'};
   function actions(lead) {
@@ -108,7 +108,11 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
       (lead.status === 'new' && !lead.assignedTo ? '<p class="chips crm-wait">'+waitingSince(lead.createdAt)+'</p>' : '') +
       (lead.propertyCode ? '<p><a href="/#editar/'+escape(lead.propertyId)+'">'+
         escape(lead.propertyCode+' · '+lead.propertyTitle)+'</a></p>' : '') +
+      (lead.preferredVisitDate ? '<p>Data solicitada: '+escape(lead.preferredVisitDate.split('-').reverse().join('/'))+'</p>' : '') +
+      (lead.proposedPrice != null ? '<p>Proposta: '+money(lead.proposedPrice)+(lead.proposalOperation==='rent'?'/mês':'')+'</p>' : '') +
       whatsappLink(lead.phone,lead.propertyCode) + actions(lead) +
+      (lead.status==='won' && lead.propertyId && lead.proposalOperation ? '<button type="button" class="alt" data-close-offer>'+
+        (lead.proposalOperation==='sale' ? 'Marcar como vendido' : 'Marcar como locado')+'</button>' : '')+
       '</div><label>Etapa<select name="status">'+stageOptions(lead.status)+'</select></label>' +
       links(lead)+'<label>Observações<textarea name="notes" maxlength="4000" rows="2">'+escape(lead.notes)+'</textarea></label>' +
       '<div><button type="submit" class="alt">Salvar</button>' +
