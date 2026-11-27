@@ -11,6 +11,7 @@ const {chromium} = require('playwright');
     await page.locator('#login input[name=password]').fill(password);
     await page.getByRole('button',{name:'Entrar',exact:true}).click();
     await page.getByRole('link',{name:'CRM',exact:true}).click();
+    await page.getByText('Novo contato',{exact:true}).click();
     const form = page.locator('#lead-new');
     await form.locator('[name=name]').fill('Contato navegador');
     await form.locator('[name=assignedTo]').selectOption({label:'admin'});
@@ -22,8 +23,29 @@ const {chromium} = require('playwright');
     await lead.waitFor();
     await lead.locator('[name=status]').selectOption('visit');
     await lead.getByRole('button',{name:'Salvar'}).click();
-    await lead.getByText('Histórico de etapas').click();
+    await lead.getByText('Histórico de atendimento').click();
     await lead.locator('ol').getByText(/Visita/).waitFor();
+    const fixture = await page.request.post(base+'/api/admin/crm/leads',{
+      headers:{'X-Imoveis-Action':'1'},
+      data:{name:'Contato da fila',phone:'(11) 99999-1234',status:'new',
+        propertyId:'00000000-0000-4000-8000-000000000071'}
+    });
+    assert.equal(fixture.status(),201);
+    const filters = page.locator('#crm-filters');
+    await filters.locator('[name=queue]').selectOption('true');
+    await filters.getByRole('button',{name:'Aplicar filtros'}).click();
+    await page.locator('.crm-inbox-item').filter({hasText:'Contato da fila'}).click();
+    const queued = page.locator('.crm-lead').filter({hasText:'Contato da fila'});
+    await queued.getByText('Chegou agora').waitFor();
+    assert.equal(await lead.count(),0);
+    const whatsapp = new URL(await queued.getByRole('link',{name:'WhatsApp'}).getAttribute('href'));
+    assert.equal(whatsapp.pathname,'/5511999991234');
+    assert.match(whatsapp.searchParams.get('text'),/LEG-1/);
+    await filters.locator('[name=queue]').selectOption('false');
+    await filters.getByRole('searchbox').fill('Contato navegador');
+    await filters.getByRole('button',{name:'Aplicar filtros'}).click();
+    await lead.waitFor();
+    assert.equal(await queued.count(),0);
     for (const width of [1366,768,390]) {
       await page.setViewportSize({width,height:900});
       const dimensions = await page.evaluate(() => [document.documentElement.scrollWidth,innerWidth]);
@@ -50,6 +72,19 @@ const {chromium} = require('playwright');
     await page.getByRole('button',{name:'Menu',exact:true}).click();
     await page.getByRole('button',{name:'Tema escuro',exact:true}).click();
     assert(await page.locator('body.workspace-dark').count());
+    await page.setViewportSize({width:1366,height:900});
+    await page.getByRole('button',{name:'Recolher menu lateral'}).click();
+    assert(await page.locator('body.workspace-sidebar-collapsed').count());
+    await page.getByRole('button',{name:'Expandir menu lateral'}).click();
+    await page.getByRole('button',{name:'Sair',exact:true}).click();
+    await page.getByRole('heading',{name:'Acesso administrativo'}).waitFor();
+    assert.equal((await page.request.get(base+'/api/admin/session')).status(),401);
+    const docs = await browser.newPage();
+    await docs.goto(base+'/docs/catalogo/index.html');
+    await docs.locator('.swagger-ui .opblock').first().waitFor();
+    const stylesheet = docs.locator('link[rel=stylesheet][href$=estilos]');
+    assert(await stylesheet.evaluate(link => link.sheet?.cssRules.length > 0));
+    await docs.close();
     console.log('Chromium: prévia real da vitrine, rascunho e tema escuro do painel.');
   } finally {
     await browser.close();

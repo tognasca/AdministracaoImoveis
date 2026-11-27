@@ -36,6 +36,7 @@ async function verify() {
     });
     assert.equal(login.status(),204);
     await page.goto(api+'/#configuracoes');
+    await page.getByRole('button',{name:'Canais de publicação',exact:true}).click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.getByRole('link',{name:'Baixar arquivos da vitrine'}).click()
@@ -53,6 +54,13 @@ async function verify() {
     await page.getByRole('heading',{name:'Casa comercial',level:1}).waitFor();
     await page.locator('#property-cover').evaluate(img => img.decode());
     assert.equal(new URL(page.url()).pathname,'/imoveis/');
+    const interest = page.locator('#property-contact-form');
+    await interest.getByLabel('Seu nome').fill('Contato do site externo');
+    await interest.getByLabel('E-mail').fill('contato@example.test');
+    await interest.getByRole('button',{name:'Enviar interesse'}).click();
+    await interest.getByText('A imobiliária recebeu seu contato.').waitFor();
+    const leads = await (await page.request.get(api+'/api/admin/crm/leads')).json();
+    assert(leads.some(lead => lead.name === 'Contato do site externo' && lead.propertyId && lead.status === 'new'));
     await page.getByRole('link',{name:/Voltar aos imóveis/}).click();
     await page.getByRole('searchbox').fill('REPETIDO');
     await page.getByRole('button',{name:'Buscar imóveis'}).click();

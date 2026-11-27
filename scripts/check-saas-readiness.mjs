@@ -9,7 +9,7 @@ const checks = [
  ['verified tenant domain', 'src/Imoveis.Web/TenantContext.cs', /d.verified_at IS NOT NULL/],
  ['CRM endpoint registration', 'src/Imoveis.Web/Program.cs', /LeadEndpoints\.Map\(admin\)/],
  ['theme endpoint registration', 'src/Imoveis.Web/Program.cs', /SaasThemeEndpoints\.Map\(admin\)/],
- ['CRM navigation', 'src/Imoveis.Web/wwwroot/app.js', /await crm\(isCurrent\)/]
+ ['CRM navigation', 'src/Imoveis.Web/wwwroot/app.js', /await crm\(isCurrent(?:,|\))/]
 ];
 let failed = 0;
 for (const [name,path,pattern] of checks) {

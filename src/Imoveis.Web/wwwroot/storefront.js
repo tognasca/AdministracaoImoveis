@@ -1,4 +1,5 @@
-import {app, escape, money} from './ui.js';
+import {listingPrice} from './rental.js';
+import {app, escape} from './ui.js';
 import {storefrontTheme} from './storefront-theme.js';
 import {catalogRequest, catalogMedia, catalogPhoto, storefrontHref, storefrontLink} from './public-catalog.js';
 import {kindSelect} from './property-kinds.js';

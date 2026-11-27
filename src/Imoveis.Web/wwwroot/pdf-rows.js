@@ -31,7 +31,8 @@ export function readPdfBlock(text) {
 
 export function classifyPdfPages(pages, model = 'auto') {
   const selected = model === 'auto' ? detectPdfModel(pages) : model;
-  const result = (selected === 'kallas' || selected === 'catalog') ? classifyKallasPages(pages) : classifyGenericPages(pages);
+  const result = selected === 'sales' || selected === 'market-report' ? classifySalesPages(pages) : selected === 'units' ? classifyUnitTables(pages) :
+    (selected === 'kallas' || selected === 'catalog') ? classifyKallasPages(pages) : classifyGenericPages(pages);
   return {...result, model:selected};
 }
 
@@ -141,7 +142,120 @@ const catalogHeader = line => {
 const projectPattern = /^(.+?)\s{2,}((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d{2}|PRONTO)\s{2,}(.+)$/i;
 const optionPattern = /^(.*?)\s{2,}(.*?)\s{2,}(.*?)\s+R\$\s*([\d.,]+)/i;
 
+function unitTableHeader(page) {
+  if (/\bempreendimento\s+bloco\s+unidade\s+dorm.*\bavalia[cç][aã]o\b/i.test(page) &&
+      /\bpromocional\b/i.test(page)) return 'appraisal';
+  if (/\bempreendimento[^\n]*dorms[^\n]*perfil[^\n]*sacada[^\n]*vagas[^\n]*\bde\s*:[^\n]*\bpor\s*:/i.test(page))
+    return 'discount';
+  return null;
+}
+
+function classifyUnitTables(pages) {
+  const properties = [], information = [];
+  pages.forEach((page, index) => {
+    const layout = unitTableHeader(page);
+    if (!layout) {
+      const generic = classifyGenericPages([page]);
+      for (const row of [...generic.properties, ...generic.information]) row.page = index + 1;
+      properties.push(...generic.properties);
+      information.push(...generic.information);
+      return;
+    }
+    for (const raw of page.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const cells = line.replace(/R\$\s+/g,'R$ ').split(/\s{2,}/);
+      const fields = layout === 'appraisal' ? 6 : 8;
+      const [title, ...context] = cells.slice(0,-fields);
+      const [unit, bedrooms] = cells.slice(-fields);
+      const price = catalogNumber((cells.at(-1) ?? '').replace(/^R\$\s*/,''));
+      const block = context.at(-1);
+      if (!title || !block || !/^\d+[\w-]*$/.test(unit ?? '') || !/^\d+$/.test(bedrooms ?? '') || !price) {
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      const labels = layout === 'appraisal' ?
+        ['Área','Renda limitadora','Avaliação','Valor promocional'] :
+        ['Perfil','Sacada','Vagas','Regional','Valor de','Valor por'];
+      const notes = context.slice(0,-1).concat(cells.slice(2-fields).map((value,i) => labels[i]+': '+value));
+      const data = {
+        title:title+' — '+block+' / unidade '+unit,
+        kind:kindFromTitle(title) ?? 'Apartamento',
+        bedrooms,
+        price,
+        notes:['Empreendimento: '+title,'Bloco/torre: '+block,'Unidade: '+unit,...notes].join('\n')
+      };
+      if (layout === 'appraisal') data.size = catalogNumber(cells.at(-4));
+      properties.push({page:index+1,text:line,data,unitIdentity:true});
+    }
+  });
+  return {properties,information};
+}
+
+function salesLayout(page) {
+  if (/pre[cç]o m[eé]dio por m[²2] de [áa]rea/i.test(page)) return 'market-report';
+  if (/unidade\s+[áa]rea\s+valor da unidade\b/i.test(page) && /financiamento/i.test(page)) return 'schedule';
+  if (/unidades\s+vaga\s+[áa]rea\s+sinal.*financiamento\s+total/i.test(page)) return 'launch';
+  return null;
+}
+
+function classifySalesPages(pages) {
+  const properties = [], information = [];
+  let project = '', layout = null;
+  const bedroomsByEnding = new Map();
+  pages.forEach((page,index) => {
+    layout = salesLayout(page) ?? layout;
+    const projectLine = page.match(/^\s*(?:empreendimento\s+(.+?)|((?:edif[ií]cio)\s+.+?))\s*$/im);
+    if (projectLine) {
+      const name = (projectLine[1] ?? projectLine[2]).trim();
+      if (name !== project) bedroomsByEnding.clear();
+      project = name;
+    }
+    for (const match of page.matchAll(/termina[cç][aã]o\s+(\d+)\s*-\s*(\d+)\s+(?:qtos|dorms|quartos)/gi))
+      bedroomsByEnding.set(Number(match[1]),String(Number(match[2])));
+    for (const raw of page.split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line) continue;
+      const cells = line.split(/\s{2,}/);
+      const [unit,first,second] = cells;
+      const historical = /vendid[oa]|reservad[oa]|indispon[ií]vel/i.test(cells.at(-1)) ||
+        (layout === 'launch' && /vendid[oa]|reservad[oa]/i.test(first ?? ''));
+      const launch = layout === 'launch';
+      const statusInSpace = launch && historical && !/^\d+$/.test(first);
+      const amounts = launch ? cells.slice(statusInSpace ? 2 : 3) : cells.slice(2,-1);
+      if (!project || layout === 'market-report' || !/^\d+$/.test(unit) ||
+          amounts.length !== (launch ? 5 : 6) || !amounts.every(value => catalogNumber(value))) {
+        information.push({page:index+1,text:line,data:{}});
+        continue;
+      }
+      const [price,...payments] = launch ? [amounts.at(-1),...amounts.slice(0,-1)] : amounts;
+      const labels = launch ? ['Sinal','Mensais','Intercaladas','Financiamento'] :
+        ['Sinal','Mensais','Anuais','Única','Financiamento'];
+      const notes = [
+        'Empreendimento: '+project,
+        'Unidade: '+unit,
+        'Situação na tabela: '+(launch ? (historical ? first : 'Confirmar disponibilidade') : cells.at(-1)),
+        launch && !historical ? 'Vagas: '+first : '',
+        ...payments.map((amount,i) => labels[i]+': '+amount),
+        'Confirme preço e disponibilidade com a fonte antes de publicar.'
+      ].filter(Boolean).join('\n');
+      properties.push({page:index+1,text:line,unitIdentity:true,reviewAvailability:historical,data:{
+        title:project+' — unidade '+unit,
+        kind:kindFromTitle(project) ?? 'Apartamento',
+        price:catalogNumber(price),
+        size:statusInSpace ? '' : catalogNumber(launch ? second : first),
+        bedrooms:launch ? bedroomsByEnding.get(Number(unit.slice(-2))) ?? '' : '',
+        notes
+      }});
+    }
+  });
+  return {properties,information};
+}
+
 export function detectPdfModel(pages) {
+  if (pages.some(unitTableHeader)) return 'units';
+  const sale = pages.map(salesLayout).find(Boolean);
+  if (sale) return sale === 'market-report' ? sale : 'sales';
   const text = pages.join('\n');
   // Prefer structural evidence over supplier names. Other developers use the same
   // project / delivery / address / variant layout under different branding.
@@ -212,7 +326,7 @@ function classifyKallasPages(pages) {
         continue;
       }
       const [, variant, rooms, parking, price] = option;
-      const area = variant.match(/^(\d[\d.,]*)\s*m\s*[²2]/i);
+      const area = /\d\s*(?:a|ou|e|[-/])\s*\d/i.test(variant) ? null : variant.match(/^(\d[\d.,]*)\s*m\s*[²2]/i);
       const amount = catalogNumber(price);
       const kind = /loja/i.test(variant + ' ' + rooms) ? 'Loja' :
         /cobertura/i.test(variant) ? 'Cobertura' : /studio/i.test(rooms) ? 'Studio' : 'Apartamento';
@@ -231,8 +345,9 @@ function classifyKallasPages(pages) {
           'Dormitórios ou suítes no PDF: ' + rooms.trim(),
           'Vagas no PDF: ' + parking.trim(),
           'Preço a partir de, sujeito à confirmação de disponibilidade.',
+          line.slice(option[0].length).trim() ? 'Referências no PDF: '+line.slice(option[0].length).trim() : '',
           'Confirmar cidade e dados antes de publicar.'
-        ].join('\n')
+        ].filter(Boolean).join('\n')
       };
       properties.push({page:index+1,text:project.name+'\nEntrega: '+project.delivery+'\n'+project.address+'\n'+line,data});
     }
@@ -247,21 +362,42 @@ export async function ensurePdfCodes(rows) {
     if (String(row.data.code ?? '').trim()) continue;
     const data = row.data;
     const address = (data.notes ?? '').match(/(?:Endereço informado|Endereço):\s*([^\n]+)/i)?.[1] ?? '';
-    const identity = [data.title,data.kind,data.district,data.city,data.location,data.size,data.bedrooms,address]
+    const identity = (row.unitIdentity ? [data.title] : [data.title,data.kind,data.district,data.city,data.location,data.size,data.bedrooms,address])
       .map(value => String(value ?? '').trim().toLowerCase().normalize('NFC'));
     if (!identity.some(Boolean)) identity.push(row.text ?? crypto.randomUUID());
     const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(identity)));
     const base = 'PDF-'+Array.from(new Uint8Array(digest).slice(0,10),v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
     let code = base, suffix = 2;
-    while (used.has(code.toLowerCase())) code = base+'-'+suffix++;
+    while (!row.unitIdentity && used.has(code.toLowerCase())) code = base+'-'+suffix++;
     data.code = code;
     row.generatedCode = true;
     used.add(code.toLowerCase());
   }
 }
 
-export function applyPdfCityDefault(data) {
+const pdfKinds = {
+  apartamento:'Apartamento', apto:'Apartamento', casa:'Casa', sobrado:'Sobrado',
+  cobertura:'Cobertura', terreno:'Terreno', chacara:'Chácara', sitio:'Sítio',
+  galpao:'Galpão', studio:'Studio', 'sala comercial':'Sala comercial', loja:'Loja',
+  kitnet:'Kitnet'
+};
+
+function kindFromTitle(title) {
+  const normalized = normalizedCatalogLabel(title).trim();
+  return Object.entries(pdfKinds).find(([label]) =>
+    new RegExp('^'+label+'(?=$|[\\s.,:–—-])').test(normalized))?.[1];
+}
+
+export function applyPdfTitleSuggestions(data) {
+  if (!String(data.kind ?? '').trim()) {
+    const kind = kindFromTitle(data.title);
+    if (kind) data.kind = kind;
+  }
   if (String(data.city ?? '').trim()) return;
   const location = String(data.location ?? '').match(/^(.+?)\s+-\s+([^/]+)(?:\/\s*[A-Z]{2})?$/i);
-  data.city = location?.[2]?.trim() || 'São Paulo';
+  const title = String(data.title ?? '').split(/\s+[—–-]\s+unidade\b/i)[0];
+  const cityByLabel = title.match(/\b(?:cidade|munic[ií]pio)\s*:\s*([\p{L}][\p{L}'’ ]*)(?=\s*[,/;–—-]|$)/iu);
+  const cityByState = title.match(/(?:\s(?:em|[-–—])\s|[,|]\s*)([\p{L}][\p{L}'’ ]*?)\s*[-/]\s*(?:AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/iu);
+  const city = location?.[2] ?? cityByLabel?.[1] ?? cityByState?.[1];
+  if (city?.trim()) data.city = city.trim();
 }

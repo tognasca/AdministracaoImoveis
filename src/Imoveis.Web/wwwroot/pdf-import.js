@@ -1,8 +1,8 @@
 import {app, escape, notice, report} from './ui.js';
 import {adminNav, bindLogout} from './admin-ui.js';
 import {request} from './api.js';
-import {prepare} from './imports.js';
-import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes, applyPdfCityDefault} from './pdf-rows.js';
+import {prepare, preparePriceUpdates, importReviewTable, bindReviewFilters} from './imports.js';
+import {classifyPdfPages, pdfRowCells, readPdfBlock, ensurePdfCodes, applyPdfTitleSuggestions} from './pdf-rows.js';
 
 import {excel} from './import-files.js';
 import {pdfWorkbook, pdfCorrections} from './pdf-excel.js';
@@ -18,14 +18,14 @@ const mapping = columns.map(([key]) => key);
 
 export function mountPdfImport(isCurrent) {
   let file, rows = [], information = [], source = '', model = 'generic';
-  let busy = false, scrollObserver;
+  let busy = false, pricesOnly = false, scrollObserver;
   function shell(content) {
     scrollObserver?.disconnect();
     app.innerHTML = adminNav() + '<h2>Tratar PDF de imóveis</h2>' + notice + content;
     bindLogout();
   }
   function choose(message = '') {
-    file = undefined; rows = []; information = []; source = ''; model = 'generic';
+    file = undefined; rows = []; information = []; source = ''; model = 'generic'; pricesOnly = false;
     shell('<form id="pdf-upload" class="box"><label>Arquivo PDF<input name="file" type="file" accept=".pdf,application/pdf" required></label>' +
       '<label>Modo de leitura (opcional)<select name="model"><option value="auto">Automático — recomendado para qualquer fornecedor</option>' +
       '<option value="kallas">Tabelão de empreendimentos Kallas e Kazzas</option><option value="generic">Tabelas por cabeçalho e texto corrido</option></select></label>' +
@@ -50,9 +50,21 @@ export function mountPdfImport(isCurrent) {
         model = result.model;
         if (result.properties.length > 1000) throw Error('O PDF tem mais de 1.000 imóveis candidatos. Divida o arquivo.');
         file = upload;
-        rows = result.properties.map(row => ({...row, selected:true}));
+        rows = result.properties.map(row => ({...row, selected:!row.reviewAvailability}));
         await ensurePdfCodes(rows);
-        rows.forEach(row => applyPdfCityDefault(row.data));
+        if (model === 'units' || model === 'sales') {
+          const counts = new Map();
+          for (const {data,unitIdentity} of rows) {
+            if (unitIdentity) counts.set(data.code,(counts.get(data.code) ?? 0)+1);
+          }
+          for (const row of rows) {
+            if (row.unitIdentity && counts.get(row.data.code) > 1) {
+              row.duplicateUnit = true;
+              row.selected = false;
+            }
+          }
+        }
+        rows.forEach(row => applyPdfTitleSuggestions(row.data));
         if (!isCurrent()) return;
         information = result.information;
         source = '';
@@ -73,7 +85,7 @@ export function mountPdfImport(isCurrent) {
     try {
       const corrected = pdfCorrections(await excel(upload),rows,columns);
       await ensurePdfCodes(corrected.rows);
-      corrected.rows.forEach(row => applyPdfCityDefault(row.data));
+      corrected.rows.forEach(row => applyPdfTitleSuggestions(row.data));
       if (!isCurrent()) return;
       rows = corrected.rows;
       source = corrected.source || source;
@@ -100,13 +112,20 @@ export function mountPdfImport(isCurrent) {
       }).join('') + '</tr>').join('');
     shell('<form id="pdf-review"><section class="box"><h3>'+escape(file.name)+'</h3>' +
       '<label>Origem dos códigos<input name="source" required maxlength="100" value="'+escape(source)+'"></label>' +
+      '<label><input type="checkbox" name="pricesOnly"'+(pricesOnly ? ' checked' : '')+'> Atualizar apenas os preços de imóveis existentes</label>' +
+      '<p class="muted">Use a mesma origem e os mesmos códigos do cadastro anterior.</p>' +
       ((model === 'kallas' || model === 'catalog') ? '<p class="notice">Catálogo com múltiplos empreendimentos. Cada metragem e preço corresponde a uma opção de empreendimento. ' +
       'Os códigos ausentes são gerados automaticamente. Confira a cidade. Entrega, endereço e vagas estão nas observações internas. ' +
       'Áreas em intervalo precisam de conferência. Os preços são valores a partir de.</p>' : '') +
+      (model === 'sales' ? '<p class="notice">Tabela comercial. Unidades vendidas, reservadas ou indisponíveis começam desmarcadas. Preencha a cidade e confirme a validade dos preços e a disponibilidade.</p>' : '') +
+      (model === 'market-report' ? '<p class="notice">O PDF apresenta preços médios por m². Consulte os trechos informativos abaixo.</p>' : '') +
+      (model === 'units' ? '<p class="notice">Os preços promocionais preenchem a coluna Preço. Unidades repetidas começam desmarcadas. Compare as páginas e selecione a oferta correta para cada unidade.</p>' : '') +
       '<p class="muted">Confirme os campos sugeridos. Use Excluir para tirar uma linha da grade ou desmarque-a para deixá-la de fora da importação.</p></section>' +
       '<section class="box"><h3>Corrigir no Excel</h3><div class="row"><button type="button" class="alt" id="pdf-export">Exportar para Excel</button><label>Carregar Excel corrigido<input id="pdf-corrected" type="file" accept=".xlsx"></label></div><p class="muted">Edite a aba Imóveis e salve como .xlsx. Ao carregar, a planilha substitui esta grade. A gravação acontece somente após a conferência.</p></section>' +
-      '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Quando o PDF não informa a cidade, usamos São Paulo; você pode alterar. Pendências de publicação não impedem salvar como rascunho.</p>' +
-      '<div class="pdf-review-split"><div class="pdf-document" hidden></div><div class="pdf-review-rows"><div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
+      '<h3>Imóveis candidatos</h3><p id="pdf-review-summary" role="status"></p><p class="muted">Códigos ausentes são gerados automaticamente. Confira a cidade sugerida ou preencha se estiver em branco. Pendências de publicação não impedem salvar como rascunho.</p>' +
+      '<div class="workspace-sections pdf-view-switch" hidden><button type="button" class="alt" data-pdf-view="document" aria-pressed="false">Documento</button>'+
+      '<button type="button" class="alt" data-pdf-view="data" aria-pressed="true">Dados extraídos</button></div>'+
+      '<div class="pdf-review-split" data-pdf-view="data"><div class="pdf-document" hidden></div><div class="pdf-review-rows"><div class="pdf-scrollbar" tabindex="0" role="region" aria-label="Rolar colunas da grade"><div></div></div><div class="box table pdf-grid" tabindex="0" role="region" aria-label="Grade de imóveis"><table><thead><tr><th>Incluir</th><th>Ações</th><th>Revisão</th><th>Origem no PDF</th>' +
       columns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>' +
       (body || '<tr><td colspan="15">Nenhum imóvel sugerido. Use um trecho abaixo ou adicione uma linha.</td></tr>') +
       '</tbody></table></div></div></div><div class="row"><button type="button" class="alt" id="pdf-back">Trocar PDF</button>' +
@@ -120,6 +139,14 @@ export function mountPdfImport(isCurrent) {
     if (/\.pdf$/i.test(file.name)) {
       const url = URL.createObjectURL(new Blob([file],{type:'application/pdf'}));
       documentPanel.hidden = false;
+      const switcher = form.querySelector('.pdf-view-switch');
+      switcher.hidden = false;
+      const buttons = [...switcher.querySelectorAll('button')];
+      for (const button of buttons) button.onclick = () => {
+        for (const item of buttons) item.setAttribute('aria-pressed',String(item===button));
+        form.querySelector('.pdf-review-split').dataset.pdfView = button.dataset.pdfView;
+        resizeScroll();
+      };
       documentPanel.innerHTML = '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="'+url+'">Abrir PDF original</a>'+
         '<iframe title="PDF original" loading="lazy" src="'+url+'"></iframe>';
       const cleanup = new MutationObserver(() => {
@@ -174,7 +201,7 @@ export function mountPdfImport(isCurrent) {
         if (!row.data.size && /\d+\s+a\s+\d+.*m[²2]/i.test(row.text ?? '')) issues.push('Conferir área: intervalo no PDF');
         if (row.selected && issues.length) needsReview++;
         const tr = grid.querySelector('[data-row="'+index+'"]');
-        tr.querySelector('.pdf-row-review').innerHTML = !row.selected ? '<span class="muted">Fora da importação</span>' :
+        tr.querySelector('.pdf-row-review').innerHTML = !row.selected ? '<span class="muted">'+(row.duplicateUnit ? 'Unidade repetida no PDF' : row.reviewAvailability ? 'Conferir disponibilidade' : 'Fora da importação')+'</span>' :
           issues.length ? '<span class="pdf-review-badge">Revisar</span><ul>'+issues.map(issue => '<li>'+escape(issue)+'</li>').join('')+'</ul>' : '<span class="pdf-ready">Pronto para conferir</span>';
         tr.querySelectorAll('[data-field]').forEach(input => {
           const key = input.dataset.field;
@@ -191,6 +218,7 @@ export function mountPdfImport(isCurrent) {
     updateIssues();
     form.oninput = event => {
       if (event.target.name === 'source') source = event.target.value;
+      if (event.target.name === 'pricesOnly') pricesOnly = event.target.checked;
       const row = event.target.closest('tr[data-row]');
       if (!row) return;
       const item = rows[Number(row.dataset.row)];
@@ -218,7 +246,7 @@ export function mountPdfImport(isCurrent) {
       try {
         rows.push({...item,selected:true});
         await ensurePdfCodes(rows);
-        applyPdfCityDefault(rows[rows.length-1].data);
+        applyPdfTitleSuggestions(rows[rows.length-1].data);
         if (!isCurrent()) return;
         edit();
         app.querySelector('tr[data-row="'+(rows.length-1)+'"] input[data-field="code"]').focus();
@@ -248,7 +276,8 @@ export function mountPdfImport(isCurrent) {
         const cells = selected.map(row => pdfRowCells(row.data,mapping));
         const codes = [...new Set(cells.map(cell => cell[0].trim()).filter(code => code.length && code.length <= 80))];
         const prior = await request(endpoint+'/conferencia','POST',{source,codes});
-        if (isCurrent()) review(prepare(cells,mapping,prior,source), selected);
+        if (!isCurrent()) return;
+        review((pricesOnly ? preparePriceUpdates : prepare)(cells,mapping,prior,source), selected);
       } catch (error) { if (isCurrent()) report(error.message); }
       finally { busy = false; controls.forEach(control => { control.disabled = false; }); }
     };
@@ -258,12 +287,11 @@ export function mountPdfImport(isCurrent) {
     const valid = preview.filter(row => row.status === 'Criar' || row.status === 'Atualizar');
     const hasErrors = preview.some(row => row.status === 'Revisar');
     shell('<p>'+escape(file.name)+' · '+escape(source)+'</p>' +
-      '<div class="box table"><table><thead><tr><th>Página</th><th>Código</th><th>Resultado</th><th>Detalhes</th></tr></thead><tbody>' +
-      preview.map((row,i)=>'<tr><td>'+ (selected[i].page ?? 'Manual') + '</td><td>'+escape(row.data.code)+'</td><td>'+
-        escape(row.status)+'</td><td>'+escape(row.note)+'</td></tr>').join('')+'</tbody></table></div>' +
+      importReviewTable(preview,escape,'Página',(_,index)=>selected[index].page ?? 'Manual')+
       (hasErrors ? '<p>Volte à grade para corrigir ou desmarcar as linhas em revisão.</p>' : '') +
       '<div class="row"><button type="button" class="alt" id="pdf-edit">Voltar à grade</button>' +
-      '<button type="button" id="pdf-confirm"'+(!valid.length || hasErrors ? ' disabled' : '')+'>Importar '+valid.length+' imóvel(is)</button></div>');
+      '<button type="button" id="pdf-confirm"'+(!valid.length || hasErrors ? ' disabled' : '')+'> '+(pricesOnly ? 'Atualizar preços de ' : 'Importar ')+valid.length+' imóvel(is)</button></div>');
+    bindReviewFilters(app,preview);
     const back = app.querySelector('#pdf-edit');
     back.onclick = edit;
     app.querySelector('#pdf-confirm').onclick = async event => {
@@ -275,9 +303,9 @@ export function mountPdfImport(isCurrent) {
         for (let offset = 0; offset < bytes.length; offset += 16384)
           binary += String.fromCharCode(...bytes.subarray(offset, offset+16384));
         const result = await request(endpoint+'/confirmacao','POST',{
-          source,filename:file.name,originalFile:btoa(binary),rows:valid.map(({id,data})=>({id,data}))
+          source,filename:file.name,originalFile:btoa(binary),pricesOnly,rows:valid.map(({id,data})=>({id,data}))
         });
-        if (isCurrent()) choose(result.count+' imóvel(is) gravado(s). Novos imóveis ficam em rascunho.');
+        if (isCurrent()) choose(pricesOnly ? result.count+' preço(s) atualizado(s).' : result.count+' imóvel(is) gravado(s). Novos imóveis ficam em rascunho.');
       } catch (error) {
         if (isCurrent()) report(error.message);
         button.disabled = back.disabled = false;

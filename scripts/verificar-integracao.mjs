@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { get as httpGet } from 'node:http';
 import { get as httpsGet } from 'node:https';
 
@@ -97,8 +98,89 @@ try {
   assert.equal(home.data.zone,data.zone);
   await call(admin+'/'+id+'/fotos/'+home.photos[4]+'/capa','PUT',undefined,204);
   home = await call(admin+'/'+id);
-  await call(admin+'/'+id,'PUT',{...home.data,status:'Publicado'},204);
+  await call(admin+'/'+id,'PUT',{...home.data,status:'Publicado',rental:{monthlyRent:2500}},204);
   assert((await call(storefront)).some(item => item.id === id));
+  const availability = admin+'/'+id+'/disponibilidade';
+  const updateOffer = async (operation,value,expect=204,reservedUntil=null) => {
+    const state = await call(availability);
+    await call(availability+'/'+operation,'PUT',{availability:value,version:state.version,reservedUntil},expect);
+  };
+  await updateOffer('rent','reserved',400);
+  await updateOffer('rent','closed');
+  const saleOnly = await call('/api/imoveis/'+id);
+  assert.equal(saleOnly.data.price,550000);
+  assert.equal(saleOnly.data.rental,null);
+  const {token:catalogToken} = await call('/api/admin/integracoes/catalogo/chave','POST');
+  try {
+    const catalogResponse = await fetch(base+'/api/v1/catalogo/imoveis/'+id,{headers:{Authorization:'Bearer '+catalogToken}});
+    assert.equal(catalogResponse.status,200);
+    assert.equal((await catalogResponse.json()).rental,null);
+  } finally { await call('/api/admin/integracoes/catalogo/chave','DELETE',undefined,204); }
+  await updateOffer('sale','reserved',204,new Date(Date.now()+3600000).toISOString());
+  await call('/api/imoveis/'+id,'GET',undefined,404);
+  await updateOffer('rent','available');
+  const rentOnly = await call('/api/imoveis/'+id);
+  assert.equal(rentOnly.data.price,0);
+  assert.equal(rentOnly.data.rental.monthlyRent,2500);
+  await updateOffer('sale','available');
+  const availabilityHistory = (await call(availability)).history;
+  assert(availabilityHistory.some(event=>event.operation==='rent' && event.availability==='closed' && event.username==='admin'));
+  const interest = '/api/imoveis/' + id + '/interesse';
+  const visitId = randomUUID();
+  const proposalId = randomUUID();
+  const contact = {name:'Contato '+code,email:'contato@example.test'};
+  await call(interest,'POST',{...contact,submissionId:visitId,requestKind:'visit',preferredVisitDate:'2099-06-20'},204);
+  await call(interest,'POST',{...contact,submissionId:proposalId,requestKind:'proposal',proposalOperation:'sale',proposedPrice:525000},204);
+  const requests = await call(leads+'?queue=true&q='+encodeURIComponent(code));
+  assert(requests.some(lead => lead.id === visitId && lead.preferredVisitDate === '2099-06-20'));
+  assert(requests.some(lead => lead.id === proposalId && lead.proposedPrice === 525000 && lead.propertyId === id));
+  await call(leads+'/'+visitId+'/negociacao','POST',{action:'visit-confirmed'},204);
+  await call(leads+'/'+proposalId+'/negociacao','POST',{action:'counteroffer',price:535000},204);
+  assert((await call(leads+'/'+proposalId+'/historico')).some(event =>
+    event.action === 'counteroffer' && event.counterofferPrice === 535000));
+  const rentals = '/api/admin/locacoes';
+  const contractData = {propertyId:id,ownerName:'Proprietário de integração',renterName:'Locatário de integração',
+    startsOn:'2026-01-15',endsOn:'2026-12-31',monthlyRent:2000,managementFee:200,dueDay:10};
+  const {id:contractId} = await call(rentals,'POST',contractData,201);
+  const lease = rentals+'/'+contractId;
+  try {
+    await call(rentals,'POST',contractData,409);
+    await call(lease+'/cobrancas','POST',{month:'2026-01-01'},409);
+    await call(lease+'/vistorias/entrada','PUT',{inspectedOn:'2026-01-15',notes:'Vistoria de teste'},204);
+    const inspectionPhoto = upload();
+    inspectionPhoto.set('file',inspectionPhoto.get('photo'));
+    inspectionPhoto.delete('photo');
+    await call(lease+'/anexos/entrada','POST',inspectionPhoto,204);
+    const signedDocument = new FormData();
+    signedDocument.append('file',new Blob(['%PDF-1.4\n% Arquivo de teste\n'],{type:'application/pdf'}),'contrato.pdf');
+    await call(lease+'/anexos/contrato','POST',signedDocument,204);
+    await call(lease+'/reajustes','POST',{month:'2026-02-01',rent:2100,fee:210,reason:'Teste de reajuste'},204);
+    await call(lease+'/cobrancas','POST',{month:'2026-01-01'},204);
+    await call(lease+'/cobrancas','POST',{month:'2026-02-01'},204);
+    await call(lease+'/cobrancas/2026-02-01/repasse','POST',{reference:'prematuro'},409);
+    await call(lease+'/cobrancas/2026-02-01/pagamento','POST',{reference:'pagamento teste'},204);
+    await call(lease+'/cobrancas/2026-02-01/repasse','POST',{reference:'repasse teste'},204);
+    const record = await call(lease);
+    assert.equal(record.charges[0].rent,2100);
+    assert.equal(record.charges[1].due_on,'2026-01-15');
+    assert.equal(record.inspections[0].kind,'entrada');
+    const { token } = await call(lease+'/acesso-proprietario','POST');
+    const staffCookie = cookie;
+    let owner;
+    try {
+      cookie = undefined;
+      await call(lease+'/anexos/'+record.attachments.find(file => file.kind === 'entrada').id,'GET',undefined,401);
+      owner = await call('/api/proprietario/locacao','POST',{token});
+    } finally { cookie = staffCookie; }
+    await call(lease+'/anexos/'+record.attachments.find(file => file.kind === 'entrada').id);
+    assert.equal(owner.charges[0].rent,2100);
+    assert.equal(owner.charges[0].payment_ref,undefined);
+    assert.equal(owner.renter_name,undefined);
+    await call(lease+'/acesso-proprietario','DELETE',undefined,204);
+    await call('/api/proprietario/locacao','POST',{token},404);
+  } finally {
+    await call(lease+'/encerrar','POST',undefined,204);
+  }
   const endpoint = '/api/admin/importacoes';
   const [row] = await call(endpoint+'/conferencia','POST',{source:data.source,codes:[data.code]});
   assert.equal(row.data.zone,data.zone);

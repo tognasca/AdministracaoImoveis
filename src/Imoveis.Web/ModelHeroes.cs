@@ -65,7 +65,7 @@ static class ModelHeroes
             SELECT @tenant,@template,true,@mode,@image,@mime,@property,@photo
             WHERE @mode <> 'property' OR EXISTS (
                 SELECT 1 FROM properties p JOIN photos f ON f.property_id=p.id
-                WHERE p.id=@property AND p.tenant_id=@tenant AND p.status='Publicado' AND f.id=@photo)
+                WHERE p.id=@property AND p.tenant_id=@tenant AND imoveis_property_visible(p) AND f.id=@photo)
             ON CONFLICT (tenant_id,template,draft) DO UPDATE SET
                 mode=EXCLUDED.mode,image=EXCLUDED.image,mime=EXCLUDED.mime,
                 property_id=EXCLUDED.property_id,photo_id=EXCLUDED.photo_id

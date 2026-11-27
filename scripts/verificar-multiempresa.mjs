@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {request} from 'node:http';
 import {writeFile} from 'node:fs/promises';
@@ -221,6 +222,38 @@ const [matched] = await call(second,importPath+'/conferencia',200,'POST',{source
 assert.equal(matched.id,secondId);
 console.log('Isolamento de duas imobiliárias verificado por domínio, sessão, imóveis, fotos, exportação, usuários, CRM, vitrine e importação.');
 
+const {id:visitLead} = await call(first,crm,201,'POST',{name:'Contato com visita',status:'new',propertyId:firstId});
+await call(second,crm+'/'+visitLead+'/assumir',409,'POST');
+await call(first,crm+'/'+visitLead+'/assumir',204,'POST');
+await call(first,crm+'/'+visitLead+'/assumir',409,'POST');
+await call(first,crm+'/'+visitLead+'/primeiro-contato',204,'POST');
+const visit = crm+'/'+visitLead+'/visita';
+const future = new Date(Date.now()+86400000).toISOString();
+await call(first,visit,204,'PUT',{state:'scheduled',at:future});
+await call(second,visit,409,'PUT',{state:'confirmed'});
+await call(first,visit,204,'PUT',{state:'confirmed'});
+const [scheduled] = (await call(first,crm+'?status=visit',200)).filter(item => item.id===visitLead);
+assert.equal(scheduled.visitState,'confirmed');
+assert(scheduled.firstContactAt);
+await call(first,visit,204,'PUT',{state:'cancelled'});
+assert((await call(first,crm+'?status=contacted',200)).some(item => item.id===visitLead && item.visitState==='cancelled'));
+
+const olx = admin+'/integracoes/olx';
+const feedPath = '/integracoes/olx/feed.xml';
+await call(first,feedPath,404);
+await call(first,olx,204,'PUT',{origin:'https://imoveis-ci.test',email:'contato@example.test',
+  contactName:'Imobiliária de teste',phone:'11999991234',enabled:true});
+const listing = {zip:'06700-000',state:'SP',description:'Descrição pública de homologação do imóvel com mais de cinquenta caracteres.'};
+await call(second,olx+'/imoveis/'+firstId,400,'PUT',listing);
+await call(first,olx+'/imoveis/'+firstId,204,'PUT',listing);
+const feedXml = String(await call(first,feedPath,200));
+assert(feedXml.includes('<PostalCode>06700000</PostalCode>'));
+assert(feedXml.includes(firstId) && !feedXml.includes(secondId));
+await call(second,feedPath,404);
+await call(first,olx+'/imoveis/'+firstId,204,'DELETE');
+assert(!String(await call(first,feedPath,200)).includes(firstId));
+console.log('CRM e OLX: atendimento, visita, isolamento e publicação do feed verificados.');
+
 const operator = {...first, platformKey};
 const platform = '/api/platform/imobiliarias';
 const tenantInput = {
@@ -267,6 +300,21 @@ await call(visitor,publicFirst+'/imoveis/'+draftId,404);
 await call({...visitor,cookie:first.cookie},publicFirst+'/media/'+draftId+'/'+draftPhoto,404);
 await call(visitor,publicFirst+'/media/'+firstId+'/'+photo,200);
 await call(visitor,publicSecond+'/media/'+firstId+'/'+photo,404);
+const interest = {submissionId:randomUUID(),name:'Interesse pela vitrine',phone:'(11) 99999-1234',message:'Gostaria de visitar.'};
+const interestPath = '/imoveis/'+firstId+'/interesse';
+await call(visitor,publicFirst+interestPath,400,'POST',{...interest,phone:null});
+await call(visitor,publicSecond+interestPath,404,'POST',interest);
+await call(visitor,publicFirst+'/imoveis/'+draftId+'/interesse',404,'POST',interest);
+await call(visitor,publicFirst+interestPath,204,'POST',interest);
+await call(company(first.host),'/api'+interestPath,204,'POST',interest);
+const [interested] = (await call(first,crm,200)).filter(lead => lead.id === interest.submissionId);
+assert.equal(interested.propertyId,firstId);
+assert.equal(interested.notes,interest.message);
+assert.equal(interested.status,'new');
+assert.equal((await call(first,crm,200)).filter(lead => lead.name === interest.name).length,1);
+assert(!(await call(second,crm,200)).some(lead => lead.id === interest.submissionId));
+assert.equal((await call(first,crm+'/'+interested.id+'/historico',200))[0].changedBy,'Vitrine');
+console.log('Captação da vitrine validada: contato, imóvel publicado, repetição e isolamento.');
 const externalBrand = await call(visitor,publicFirst+'/vitrine/configuracao',200);
 assert.equal(externalBrand.name,'Imobiliária A');
 assert.equal(externalBrand.logo,publicFirst+'/media/vitrine/logo');

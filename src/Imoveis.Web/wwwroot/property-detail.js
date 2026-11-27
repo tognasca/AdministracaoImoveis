@@ -1,6 +1,7 @@
+import {listingPrice, rentalCosts} from './rental.js';
 import {app, escape, money} from './ui.js';
 
-import {catalogPhoto, storefrontHref} from './public-catalog.js';
+import {catalogPhoto, catalogRequest, storefrontHref} from './public-catalog.js';
 
 function gallery(home) {
   const total = home.photos.length;
@@ -62,6 +63,8 @@ function bindGallery(home) {
 
 export function propertyDetail(home, settings, locationText) {
   const d = home.data;
+  const areaQuery = [d.district,d.city].filter(Boolean).join(', ');
+  const mapLink = areaQuery ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(areaQuery) : '';
   const facts = [
     ['Tipo de imóvel', d.kind],
     ['Zona', d.zone],
@@ -71,13 +74,26 @@ export function propertyDetail(home, settings, locationText) {
   ].filter(([, value]) => value);
   const whatsapp = /^[0-9]{10,15}$/.test(settings.whatsapp) ? settings.whatsapp : '';
   const email = settings.email || '';
-  const contact = whatsapp || email ? '<form class="property-contact-form" id="property-contact-form">' +
-    '<h2>Fale sobre este imóvel</h2><label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
-    '<label>Sua mensagem<textarea name="message" rows="3" maxlength="800" required>Olá, gostaria de mais informações sobre este imóvel.</textarea></label>' +
-    '<div class="estate-contact">' +
-    (whatsapp ? '<button type="submit" value="whatsapp" class="btn">Continuar no WhatsApp</button>' : '') +
-    (email ? '<button type="submit" value="email" class="btn alt">Abrir e-mail</button>' : '') +
-    '</div><p class="property-contact-hint">Revise e envie a mensagem no aplicativo escolhido.</p></form>' : '';
+  const canPropose = d.price > 0 || Boolean(d.rental);
+  const actions = '<div class="row"><button type="button" class="alt" data-interest-kind="visit">Agendar visita</button>' +
+    (canPropose ? '<button type="button" class="alt" data-interest-kind="proposal">Fazer proposta</button>' : '') + '</div>';
+  const contact = '<form class="property-contact-form" id="property-contact-form">' +
+    '<h2 id="property-contact-title">Tenho interesse</h2>'+actions+'<label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
+    '<label>Telefone ou WhatsApp<input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>' +
+    '<label>E-mail<input name="email" type="email" autocomplete="email" maxlength="254"></label>' +
+    '<p class="property-contact-hint">Informe pelo menos um canal de retorno. A imobiliária usará seus dados para responder sobre este imóvel.</p>' +
+    '<fieldset id="property-visit-fields" hidden disabled><label>Data de preferência<input type="date" name="visitDate" required></label><p>A imobiliária confirmará a disponibilidade.</p></fieldset>' +
+    '<fieldset id="property-proposal-fields" hidden disabled><label>Operação<select name="operation">' +
+    (d.price > 0 ? '<option value="sale">Compra</option>' : '') +
+    (d.rental ? '<option value="rent">Locação</option>' : '') +
+    '</select></label><label id="property-proposed-price">Valor proposto (R$)<input name="proposedPrice" type="number" min="0.01" max="9999999999999.99" step="0.01" required></label></fieldset>' +
+    '<label>Sua mensagem (opcional)<textarea name="message" rows="3" maxlength="800" placeholder="Quero saber mais sobre este imóvel."></textarea></label>' +
+    '<button type="submit" class="btn">Enviar interesse</button>' +
+    '<p class="property-contact-hint" id="property-contact-status" role="status"></p>' +
+    (whatsapp || email ? '<div class="estate-contact">' +
+      (whatsapp ? '<button type="button" value="whatsapp" class="btn alt" data-contact-channel>Continuar no WhatsApp</button>' : '') +
+      (email ? '<button type="button" value="email" class="btn alt" data-contact-channel>Abrir e-mail</button>' : '') +
+      '</div>' : '')+'</form>';
   const album = d.album && /^https?:\/\//i.test(d.album) ? '<a class="btn alt" target="_blank" rel="noopener noreferrer" href="' +
     escape(d.album) + '">Ver álbum externo <span aria-hidden="true">↗</span></a>' : '';
   app.innerHTML = '<div class="property-page"><a class="estate-back" href="' + storefrontHref('vitrine') + '">← Voltar aos imóveis</a>' +
@@ -89,13 +105,17 @@ export function propertyDetail(home, settings, locationText) {
     '<button type="button" class="alt" id="property-share">Compartilhar</button></div>'+
     '<small role="status" id="property-action-status"></small></div></header>' +
     '<div class="property-layout"><section class="property-gallery" aria-label="Fotos do imóvel">' + gallery(home) + '</section>' +
-    '<aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price"><p>Valor do imóvel</p>' +
-    '<strong>' + money(d.price) + '</strong></div>' +
+    '<aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price">' +
+    (d.price > 0 || !d.rental ? '<p>Valor de venda</p><strong>'+money(d.price)+'</strong>' : '') +
+    (d.rental ? rentalCosts(d.rental) : '') + '</div>' +
     contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside>' +
-    (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
+    (facts.length || mapLink ? '<section class="property-characteristics">' +
+      (mapLink ? '<a class="property-area-link" href="'+escape(mapLink)+'" target="_blank" rel="noopener noreferrer">'+
+        '<span><small>Localização aproximada</small><strong>'+escape(areaQuery)+'</strong></span><span>Ver região ↗</span></a>' : '') +
+      '<h2>Características</h2><dl>' + facts.map(([label, value]) =>
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
-    '</div></div>' + (contact ? '<div class="property-mobile-contact"><strong>'+money(d.price)+'</strong>'+
-      '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Enviar interesse</a></div>' : '');
+    '</div></div><div class="property-mobile-contact"><strong>'+listingPrice(d)+'</strong>'+
+    '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Tenho interesse</a></div>';
   bindGallery(home);
   const favorite = app.querySelector('#property-favorite');
   const key = 'estate-favorite:'+home.id;
@@ -121,7 +141,6 @@ export function propertyDetail(home, settings, locationText) {
       if (error.name !== 'AbortError') status.textContent = 'Copie o endereço da página para compartilhar.';
     }
   };
-  if (!contact) return;
   const form = app.querySelector('#property-contact-form');
   app.querySelector('#property-contact-shortcut').onclick = event => {
     event.preventDefault();
@@ -129,22 +148,69 @@ export function propertyDetail(home, settings, locationText) {
     form.elements.contactName.focus({preventScroll:true});
   };
   form.oninput = event => event.target.setCustomValidity('');
-  form.onsubmit = event => {
+  const contactStatus = form.querySelector('#property-contact-status');
+  const submit = form.querySelector('button[type=submit]');
+  let submissionId;
+  let requestKind = null;
+  const visitFields = form.querySelector('#property-visit-fields');
+  const proposalFields = form.querySelector('#property-proposal-fields');
+  const title = form.querySelector('#property-contact-title');
+  const contactLabels = {visit:['Agendar visita','Enviar pedido de visita'],proposal:['Fazer proposta','Enviar proposta']};
+  const selectKind = kind => {
+    if (submit.dataset.sending) return;
+    if (!submit.disabled && requestKind === kind) kind = null;
+    if (requestKind !== kind || submit.disabled) submissionId = undefined;
+    requestKind = kind;
+    visitFields.hidden = visitFields.disabled = kind !== 'visit';
+    proposalFields.hidden = proposalFields.disabled = kind !== 'proposal';
+    title.textContent = contactLabels[kind]?.[0] ?? 'Tenho interesse';
+    submit.textContent = contactLabels[kind]?.[1] ?? 'Enviar interesse';
+    submit.disabled = false;
+    contactStatus.textContent = '';
+  };
+  for (const button of form.querySelectorAll('[data-interest-kind]'))
+    button.onclick = () => selectKind(button.dataset.interestKind);
+  form.onsubmit = async event => {
     event.preventDefault();
-    const {contactName, message} = form.elements;
-    const empty = [contactName, message].find(field => !field.value.trim());
-    if (empty) {
-      empty.setCustomValidity('Preencha este campo.');
-      empty.reportValidity();
+    if (submit.disabled) return;
+    const {contactName,phone,email:contactEmail,message} = form.elements;
+    if (!phone.value.trim() && !contactEmail.value.trim()) {
+      phone.setCustomValidity('Informe seu telefone ou e-mail.');
+      phone.reportValidity();
       return;
     }
-    const subject = 'Contato sobre ' + d.title + ' (ref. ' + d.code + ')';
-    const text = 'Imóvel: ' + d.title + ' (ref. ' + d.code + ')\nNome: ' + contactName.value.trim() + '\n\n' + message.value.trim();
-    if ((event.submitter?.value === 'email' || !whatsapp) && email) {
-      const recipient = encodeURIComponent(email).replace('%40', '@');
-      location.href = 'mailto:' + recipient + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
-    } else {
-      location.href = 'https://wa.me/' + whatsapp + '?text=' + encodeURIComponent(text);
-    }
+    submit.disabled = true;
+    submit.dataset.sending = 'true';
+    contactStatus.textContent = 'Enviando…';
+    try {
+      submissionId ??= crypto.randomUUID();
+      await catalogRequest('/api/imoveis/'+encodeURIComponent(home.id)+'/interesse','POST',{
+        submissionId,name:contactName.value,email:contactEmail.value,phone:phone.value,message:message.value,
+        requestKind,
+        preferredVisitDate:requestKind === 'visit' ? form.elements.visitDate.value : null,
+        proposalOperation:requestKind === 'proposal' ? form.elements.operation.value : null,
+        proposedPrice:requestKind === 'proposal' ? Number(form.elements.proposedPrice.value) : null
+      });
+      form.reset();
+      submit.textContent = requestKind === 'proposal' ? 'Proposta enviada' : 'Solicitação enviada';
+      contactStatus.textContent = requestKind === 'visit' ? 'Pedido enviado. Aguarde a confirmação da imobiliária.' : requestKind === 'proposal' ? 'A imobiliária recebeu sua proposta.' : 'A imobiliária recebeu seu contato.';
+    } catch (error) {
+      contactStatus.textContent = error.message;
+      submit.disabled = false;
+    } finally { delete submit.dataset.sending; }
   };
+  form.addEventListener('input', () => form.elements.phone.setCustomValidity(''));
+  for (const button of form.querySelectorAll('[data-contact-channel]')) {
+    button.onclick = () => {
+      const {contactName,message} = form.elements;
+      const subject = 'Contato sobre ' + d.title + ' (ref. ' + d.code + ')';
+      const text = 'Imóvel: ' + d.title + ' (ref. ' + d.code + ')' +
+        (contactName.value.trim() ? '\nNome: ' + contactName.value.trim() : '') +
+        '\n\n' + (message.value.trim() || 'Olá, gostaria de mais informações sobre este imóvel.');
+      if (button.value === 'email') {
+        const recipient = encodeURIComponent(email).replace('%40', '@');
+        location.href = 'mailto:' + recipient + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
+      } else location.href = 'https://wa.me/' + whatsapp + '?text=' + encodeURIComponent(text);
+    };
+  }
 }

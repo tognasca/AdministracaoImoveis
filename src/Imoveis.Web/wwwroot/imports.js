@@ -81,22 +81,146 @@ export function prepare(rows,mapping,existing,source) {
       if ((data[field]?.length ?? 0) > limit) errors.push(labels[field]+' acima de '+limit+' caracteres');
     const changes = prior ? Object.keys(patch).filter(field => field !== 'code' &&
       String(prior.data[field] ?? '') !== String(data[field] ?? '')) : [];
-    return {line:index+2,id:prior?.id ?? null,data,
+    return {line:index+2,id:prior?.id ?? null,previousPrice:prior?.data.price ?? null,data,
       status:errors.length ? 'Revisar' : prior ? changes.length ? 'Atualizar' : 'Sem alteração' : 'Criar',
       note:errors.join(' · ') || (prior ? changes.map(field => labels[field]+': '+(prior.data[field] ?? '')+' → '+data[field]).join(' · ') : data.title)};
   });
 }
+export function preparePriceUpdates(rows,mapping,existing,source) {
+  const priceIndex = mapping.indexOf('price');
+  const priceMapping = mapping.map(key => ['code','price'].includes(key) ? key : '');
+  return prepare(rows,priceMapping,existing,source).map((row,index) => {
+    if (row.status === 'Revisar') return row;
+    if (!row.id) return {...row,status:'Revisar',note:'Imóvel não localizado nesta origem. Confira o código.'};
+    if (!String(rows[index][priceIndex] ?? '').trim() || row.data.price <= 0 ||
+        Math.abs(row.data.price - Math.round(row.data.price * 100) / 100) > 1e-9)
+      return {...row,status:'Revisar',note:'Informe um preço positivo com até duas casas decimais.'};
+    return row;
+  });
+}
+
+const reviewGroups = [['','Todos'],['Criar','Novos'],['price-change','Preços alterados'],
+  ['Atualizar','Atualizações'],['Sem alteração','Sem alteração'],['Revisar','Pendências']];
+const brl = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+const displayPrice = value => value > 0 ? brl.format(value) : '—';
+const priceChanged = row => row.status === 'Atualizar' && row.previousPrice !== row.data.price;
+
+function inReviewGroup(row, group) {
+  if (!group) return true;
+  if (group === 'price-change') return priceChanged(row);
+  return row.status === group && (group !== 'Atualizar' || !priceChanged(row));
+}
+
+export function importReviewTable(preview, escape, sourceLabel, sourceValue) {
+  return '<div class="workspace-sections import-review-filters" aria-label="Filtrar resultados">'+
+    reviewGroups.map(([group,label]) => '<button type="button" class="alt" data-review-group="'+group+
+      '" aria-pressed="'+(!group)+'">'+label+' · '+preview.filter(row=>inReviewGroup(row,group)).length+'</button>').join('')+
+    '</div><div class="box table"><table><thead><tr><th>'+sourceLabel+'</th><th>Código</th><th>Resultado</th>'+
+    '<th>Preço anterior</th><th>Preço na prévia</th><th>Detalhes</th></tr></thead><tbody>'+
+    preview.map((row,index)=>'<tr data-review-row><td>'+escape(sourceValue(row,index))+'</td><td>'+escape(row.data.code)+
+      '</td><td>'+escape(row.status)+'</td><td>'+displayPrice(row.previousPrice)+'</td>'+
+      '<td>'+displayPrice(row.data.price)+'</td><td>'+escape(row.note)+'</td></tr>').join('')+'</tbody></table></div>';
+}
+
+export function bindReviewFilters(container, preview) {
+  const buttons = [...container.querySelectorAll('[data-review-group]')];
+  const rows = [...container.querySelectorAll('[data-review-row]')];
+  for (const button of buttons) button.onclick = () => {
+    for (const other of buttons) other.setAttribute('aria-pressed',String(other===button));
+    rows.forEach((row,index) => { row.hidden = !inReviewGroup(preview[index],button.dataset.reviewGroup); });
+  };
+}
+
 export function mountImport(ui) {
   const {app,request,escape,notice,report,adminNav,bindLogout,isCurrent} = ui;
-  let originalFile = null, skippedListings = 0;
+  let originalFile = null, skippedListings = 0, pricesOnly = false;
   let rows = [], fileName = '', mapping = [], source = '', signature = '', models = [], lookupText = '';
   const start = stage => {
     app.innerHTML = adminNav()+'<h2>Importar imóveis</h2><p class="muted">'+stage+' de 3 · Arquivo → Mapeamento → Conferência</p>'+notice;
     bindLogout();
   };
+  async function mountOlx() {
+    const holder = app.querySelector('#olx-integration');
+    const path = '/api/admin/integracoes/olx';
+    try {
+      const {settings,url} = await request(path);
+      if (!holder.isConnected || !isCurrent()) return;
+      holder.innerHTML = '<h3>Integração OLX · VRSync</h3><form id="olx-feed" class="grid">'+
+        '<label>URL HTTPS da vitrine<input name="origin" type="url" required value="'+escape(settings?.origin ?? '')+'"></label>'+
+        '<label>Nome do contato<input name="contactName" maxlength="100" required value="'+escape(settings?.contactName ?? '')+'"></label>'+
+        '<label>E-mail do contato<input name="email" type="email" required value="'+escape(settings?.email ?? '')+'"></label>'+
+        '<label>Telefone do contato<input name="phone" type="tel" maxlength="25" required value="'+escape(settings?.phone ?? '')+'"></label>'+
+        '<label><span><input name="enabled" type="checkbox"'+(settings?.enabled?' checked':'')+'> Disponibilizar feed público</span></label>'+
+        '<div class="row"><button type="submit">Salvar configuração</button></div></form>'+
+        (settings?.enabled && url ? '<p>URL para cadastrar no Canal Pro</p><input aria-label="URL do feed" readonly value="'+escape(url)+'">'+
+          '<div class="row"><a class="btn alt" target="_blank" rel="noopener noreferrer" href="'+escape(url)+'">Abrir XML VRSync</a></div>' : '')+
+        '<form id="olx-search" class="row"><label>Buscar imóvel publicado<input name="query" type="search" maxlength="120"></label>'+
+        '<button class="alt">Buscar</button></form><form id="olx-listing" class="grid">'+
+        '<label>Imóvel<select name="property" required><option value="">Busque um imóvel</option></select></label>'+
+        '<label>CEP<input name="zip" required maxlength="9" inputmode="numeric"></label>'+
+        '<label>UF<input name="state" required maxlength="2"></label>'+
+        '<label>Descrição pública<textarea name="description" required minlength="50" maxlength="3000"></textarea></label>'+
+        '<div class="row"><button type="submit">Incluir ou atualizar anúncio</button>'+
+        '<button type="button" class="alt" id="olx-remove">Retirar do feed</button></div></form><p role="status" id="olx-feedback"></p>';
+      holder.hidden = false;
+      const feedback = holder.querySelector('#olx-feedback');
+      const feed = holder.querySelector('#olx-feed');
+      const search = holder.querySelector('#olx-search');
+      const listing = holder.querySelector('#olx-listing');
+      const property = listing.elements.property;
+      const listingPath = id => path+'/imoveis/'+encodeURIComponent(id);
+      async function perform(action) {
+        try { await action(); } catch (error) { feedback.textContent = error.message; }
+      }
+      feed.onsubmit = event => {
+        event.preventDefault();
+        perform(async () => {
+          const values = Object.fromEntries(new FormData(feed));
+          await request(path,'PUT',{...values,enabled:feed.elements.enabled.checked});
+          await mountOlx();
+          holder.querySelector('#olx-feedback').textContent = 'Configuração salva.';
+        });
+      };
+      search.onsubmit = event => {
+        event.preventDefault();
+        perform(async () => {
+          const homes = await request('/api/imoveis?q='+encodeURIComponent(search.elements.query.value.trim()));
+          property.replaceChildren(new Option('Selecione um imóvel',''),
+            ...homes.map(home => new Option(home.data.code+' · '+home.data.title,home.id)));
+          property.onchange();
+          if (!homes.length) feedback.textContent = 'Nenhum imóvel publicado encontrado.';
+        });
+      };
+      property.onchange = () => perform(async () => {
+        const id = property.value;
+        const info = id ? await request(listingPath(id)) : {};
+        if (id !== property.value) return;
+        for (const field of ['zip','state','description']) listing.elements[field].value = info[field] ?? '';
+        feedback.textContent = info.zip ? 'Imóvel configurado para o feed.' : '';
+      });
+      listing.onsubmit = event => {
+        event.preventDefault();
+        perform(async () => {
+          await request(listingPath(property.value),'PUT',Object.fromEntries(new FormData(listing)));
+          feedback.textContent = 'Anúncio configurado para o feed.';
+        });
+      };
+      holder.querySelector('#olx-remove').onclick = () => perform(async () => {
+        if (!property.value) throw Error('Selecione um imóvel.');
+        await request(listingPath(property.value),'DELETE');
+        for (const field of ['zip','state','description']) listing.elements[field].value = '';
+        feedback.textContent = 'Imóvel retirado do feed.';
+      });
+    } catch (error) {
+      if (error.status !== 403 && holder.isConnected && isCurrent()) report(error.message);
+    }
+  }
   const choose = () => {
     originalFile = null;
+    pricesOnly = false;
     start(1);
+    app.insertAdjacentHTML('beforeend','<section class="box" id="olx-integration" hidden></section>');
+    mountOlx();
     app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON, XML ou VRSync. No Excel, será usada a primeira aba.</p>'+
       '<label class="import-drop">Arraste o arquivo aqui ou selecione no dispositivo<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml,.vrsync"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
@@ -196,6 +320,7 @@ export function mountImport(ui) {
     if (skippedListings) report(skippedListings+' anúncios fora do formato de venda em reais foram ignorados.');
     app.insertAdjacentHTML('beforeend','<form id="mapping"><div class="box"><h3>'+escape(fileName)+'</h3>'+
       '<label>Origem dos códigos<input required maxlength="100" name="source" value="'+escape(source)+'"></label>'+
+      '<label><input type="checkbox" name="pricesOnly"'+(pricesOnly ? ' checked' : '')+'> Atualizar apenas os preços de imóveis existentes</label>'+
       (models.length ? '<p></p><label>Modelo salvo<select id="models"><option value="">Selecionar modelo</option>'+
         models.map((model,index) => '<option value="'+index+'">'+escape(model.source)+'</option>').join('')+'</select></label>' : '')+
       '</div><div class="box table"><table><thead><tr><th>Coluna do arquivo</th><th>Exemplo</th><th>Campo do sistema</th></tr></thead><tbody>'+
@@ -219,6 +344,7 @@ export function mountImport(ui) {
     function readMapping() {
       const form = new FormData(formElement);
       source = form.get('source').trim();
+      pricesOnly = form.has('pricesOnly');
       mapping = mapping.map((_,i) => form.get('column'+i));
       const mapped = mapping.filter(Boolean);
       if (!source || !mapped.includes('code') || new Set(mapped).size !== mapped.length)
@@ -242,7 +368,10 @@ export function mountImport(ui) {
     formElement.onsubmit = async event => {
       event.preventDefault();
       let form;
-      try { form = readMapping(); }
+      try {
+        form = readMapping();
+        if (pricesOnly && !mapping.includes('price')) throw Error('Mapeie a coluna de preço.');
+      }
       catch (error) { report(error.message); return; }
       const button = app.querySelector('#review');
       button.disabled = true;
@@ -252,7 +381,7 @@ export function mountImport(ui) {
         const existing = await request(endpoint+'/conferencia','POST',{source,codes});
         if (form.has('save')) await saveMapping();
         lookupText = 'Origem '+source+' · '+fileName;
-        if (isCurrent()) review(prepare(rows.slice(1),mapping,existing,source));
+        if (isCurrent()) review((pricesOnly ? preparePriceUpdates : prepare)(rows.slice(1),mapping,existing,source));
       } catch (error) { if (isCurrent()) report(error.message); }
       finally { button.disabled = false; }
     };
@@ -262,14 +391,12 @@ export function mountImport(ui) {
     const file = originalFile;
     const valid = preview.filter(row => row.status === 'Criar' || row.status === 'Atualizar');
     const rejected = preview.filter(row => row.status === 'Revisar');
-    app.insertAdjacentHTML('beforeend','<p>'+escape(lookupText)+'</p><div class="row">'+
-      ['Criar','Atualizar','Sem alteração','Revisar'].map(status => '<span class="chips">'+status+' · '+
-        preview.filter(row => row.status === status).length+'</span>').join('')+
-      '</div><div class="box table"><table><thead><tr><th>Registro</th><th>Código</th><th>Resultado</th><th>Detalhes</th></tr></thead><tbody>'+
-      preview.map(row => '<tr><td>'+row.line+'</td><td>'+escape(row.data.code)+'</td><td>'+row.status+'</td><td>'+escape(row.note)+'</td></tr>').join('')+
-      '</tbody></table></div><div class="row"><button class="alt" id="map">Voltar ao mapeamento</button>'+
+    app.insertAdjacentHTML('beforeend','<p>'+escape(lookupText)+'</p>'+
+      importReviewTable(preview,escape,'Registro',row=>row.line)+
+      '<div class="row"><button class="alt" id="map">Voltar ao mapeamento</button>'+
       (rejected.length ? '<button class="alt" id="errors">Baixar rejeitados</button>' : '')+
-      '<button id="confirm"'+(valid.length ? '' : ' disabled')+'>Importar '+valid.length+' imóveis</button></div>');
+      '<button id="confirm"'+(valid.length ? '' : ' disabled')+'>'+(pricesOnly ? 'Atualizar preços de ' : 'Importar ')+valid.length+' imóveis</button></div>');
+    bindReviewFilters(app,preview);
     app.querySelector('#map').onclick = map;
     const errors = app.querySelector('#errors');
     if (errors) errors.onclick = () => download('imoveis-rejeitados.csv','Registro;Código;Motivo\r\n'+
@@ -283,9 +410,12 @@ export function mountImport(ui) {
         for (let offset = 0; offset < bytes.length; offset += 16384)
           binary += String.fromCharCode(...bytes.subarray(offset,offset+16384));
         const result = await request(endpoint+'/confirmacao','POST',{
-          source,filename:fileName,originalFile:btoa(binary),rows:valid.map(({id,data}) => ({id,data}))
+          source,filename:fileName,originalFile:btoa(binary),pricesOnly,rows:valid.map(({id,data}) => ({id,data}))
         });
-        if (isCurrent()) { choose(); report(result.count+' imóveis gravados. Os novos cadastros ficam em rascunho. Para exibi-los na vitrine, abra Meus imóveis e use Salvar e publicar no cadastro.'); }
+        if (isCurrent()) {
+          const updatedPrices = pricesOnly;
+          choose();
+          report(updatedPrices ? result.count+' preço(s) atualizado(s).' : result.count+' imóveis gravados. Os novos cadastros ficam em rascunho. Para exibi-los na vitrine, abra Meus imóveis e use Salvar e publicar no cadastro.'); }
       }
       catch (error) { if (isCurrent()) report(error.message); button.disabled = false; }
     };
