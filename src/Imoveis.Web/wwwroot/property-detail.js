@@ -63,6 +63,8 @@ function bindGallery(home) {
 
 export function propertyDetail(home, settings, locationText) {
   const d = home.data;
+  const areaQuery = [d.district,d.city].filter(Boolean).join(', ');
+  const mapLink = areaQuery ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(areaQuery) : '';
   const facts = [
     ['Tipo de imóvel', d.kind],
     ['Zona', d.zone],
@@ -107,7 +109,10 @@ export function propertyDetail(home, settings, locationText) {
     (d.price > 0 || !d.rental ? '<p>Valor de venda</p><strong>'+money(d.price)+'</strong>' : '') +
     (d.rental ? rentalCosts(d.rental) : '') + '</div>' +
     contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside>' +
-    (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
+    (facts.length || mapLink ? '<section class="property-characteristics">' +
+      (mapLink ? '<a class="property-area-link" href="'+escape(mapLink)+'" target="_blank" rel="noopener noreferrer">'+
+        '<span><small>Localização aproximada</small><strong>'+escape(areaQuery)+'</strong></span><span>Ver região ↗</span></a>' : '') +
+      '<h2>Características</h2><dl>' + facts.map(([label, value]) =>
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
     '</div></div><div class="property-mobile-contact"><strong>'+listingPrice(d)+'</strong>'+
     '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Tenho interesse</a></div>';

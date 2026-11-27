@@ -26,11 +26,11 @@ function listingCard(home) {
   const cover = photo ? '<img class="listing-image" src="' + escape(catalogPhoto(home.id, photo)) +
     '" alt="" loading="lazy" decoding="async">' : '<span class="listing-placeholder">Sem foto cadastrada</span>';
   return '<article class="listing-card"><a class="listing-link" href="' + href + '">' +
-    '<div class="listing-cover' + (photo ? '' : ' listing-cover-empty') + '">' + cover +
+    '<div class="listing-cover' + (photo ? '' : ' listing-cover-empty') + '">' + cover + '</div>' +
     '<div class="listing-caption">' +
     (d.kind ? '<p class="listing-kind">' + escape(d.kind) + '</p>' : '') +
     '<h3>' + escape(d.title) + '</h3>' +
-    (place ? '<p class="listing-location">' + place + '</p>' : '') + '</div></div>' +
+    (place ? '<p class="listing-location">' + place + '</p>' : '') + '</div>' +
     '<div class="listing-body"><div class="listing-property-data"><strong>' + listingPrice(d) + '</strong>' +
     (features.length ? '<ul class="listing-facts">' + features.map(value => '<li>' + value + '</li>').join('') + '</ul>' : '') +
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';

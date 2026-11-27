@@ -272,3 +272,35 @@
   .estate-site[data-estate-template="commercial"] .estate-hero-copy { text-align:left; }
   .estate-site[data-estate-template="boutique"] .estate-hero-copy { margin-inline:auto; }
 }
+
+/* Catalogue cards keep the information readable on every cover photo. */
+.estate-site .estate-grid { gap: 22px 18px; }
+.estate-site .listing-link {
+  border: 1px solid var(--estate-rule);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--estate-paper);
+}
+.estate-site .listing-cover {
+  min-height: 0;
+  aspect-ratio: 1.7;
+  border-radius: 0;
+}
+.estate-site .listing-cover:not(.listing-cover-empty)::after { display: none; }
+.estate-site .listing-cover-empty { background: var(--estate-rule); color: var(--estate-ink); }
+.estate-site .listing-placeholder { color: inherit; }
+.estate-site .listing-caption { padding: 14px 15px 8px; color: var(--estate-ink); }
+.estate-site .listing-kind { margin-bottom: 4px; letter-spacing: .08em; }
+.estate-site .listing-card h3 { font-size: clamp(1.12rem, 1.5vw, 1.45rem); line-height: 1.2; }
+.estate-site .listing-location { margin-top: 5px; }
+.estate-site .listing-body {
+  flex: none;
+  margin-top: auto;
+  padding: 9px 15px 13px;
+  border: 0;
+  border-radius: 0;
+}
+.estate-site .listing-card-action span { width: 26px; height: 26px; }
+@media (min-width: 1100px) {
+  .estate-site .estate-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
