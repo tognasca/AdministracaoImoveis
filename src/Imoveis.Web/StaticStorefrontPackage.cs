@@ -8,7 +8,7 @@ static class StaticStorefrontPackage
     [
         "styles.css", "storefront.css", "property-detail.css",
         "api.js", "ui.js", "storefront.js", "property-detail.js", "storefront-theme.js",
-        "property-kinds.js", "public-catalog.js", "public-menu.js"
+        "property-kinds.js", "rental.js", "public-catalog.js", "public-menu.js"
     ];
 
     public static Uri? BaseUrl(IConfiguration configuration, IWebHostEnvironment environment)

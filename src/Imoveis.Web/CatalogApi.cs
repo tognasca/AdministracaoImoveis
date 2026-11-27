@@ -30,11 +30,44 @@ static class CatalogApi
 
     public static void Map(WebApplication app, RouteGroupBuilder admin)
     {
+        var assets = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["estilos"] = "swagger-ui.css",
+            ["interface"] = "swagger-ui-bundle.js",
+            ["layout"] = "swagger-ui-standalone-preset.js",
+            ["icone-16"] = "favicon-16x16.png",
+            ["icone-32"] = "favicon-32x32.png",
+            ["especificacao"] = "catalogo-v1.json"
+        };
+        const string prefix = "/docs/catalogo";
+        app.Use(async (context, next) =>
+        {
+            var original = context.Request.Path;
+            if (!original.StartsWithSegments(prefix, out var remaining) ||
+                !assets.TryGetValue(remaining.Value?.TrimStart('/') ?? "", out var file))
+            {
+                await next(context);
+                return;
+            }
+
+            context.Request.Path = prefix + "/" + file;
+            try { await next(context); }
+            finally { context.Request.Path = original; }
+        });
         app.UseSwagger(options => options.RouteTemplate = "docs/catalogo/{documentName}.json");
         app.UseSwaggerUI(options =>
         {
             options.RoutePrefix = "docs/catalogo";
-            options.SwaggerEndpoint("./catalogo-v1.json", "Catálogo v1");
+            options.SwaggerEndpoint("./especificacao", "Catálogo v1");
+            var originalIndex = options.IndexStream;
+            options.IndexStream = () =>
+            {
+                using var reader = new StreamReader(originalIndex());
+                var html = reader.ReadToEnd();
+                foreach (var (alias, file) in assets)
+                    html = html.Replace(file, alias, StringComparison.Ordinal);
+                return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(html));
+            };
         });
 
         var credentials = admin.MapGroup("/integracoes/catalogo").RequireAuthorization(policy => policy.RequireRole("Administrador"));
@@ -136,10 +169,10 @@ static class CatalogApi
     {
         var data = property.Data;
         return new(property.Id, data.Code, data.Title, data.Kind, data.City, data.District, data.Zone,
-            data.Price, data.Bedrooms, data.Size, property.Photos.Select(photo => $"/api/v1/catalogo/imoveis/{property.Id}/fotos/{photo}").ToArray());
+            data.Price, data.Bedrooms, data.Size, property.Photos.Select(photo => $"/api/v1/catalogo/imoveis/{property.Id}/fotos/{photo}").ToArray(), data.Rental);
     }
 
     private sealed record CatalogPage(int Page, int PageSize, CatalogProperty[] Properties);
     private sealed record CatalogProperty(Guid Id, string Code, string Title, string Kind, string City,
-        string District, string? Zone, decimal Price, int Bedrooms, decimal Size, string[] Photos);
+        string District, string? Zone, decimal Price, int Bedrooms, decimal Size, string[] Photos, RentalTerms? Rental);
 }

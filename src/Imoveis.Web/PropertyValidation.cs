@@ -17,7 +17,12 @@ static class PropertyValidation
         if (!string.IsNullOrWhiteSpace(input.Album) && (input.Album.Length > 2048
             || !Uri.TryCreate(input.Album.Trim(), UriKind.Absolute, out var link) || link.Scheme is not ("https" or "http")))
             return "Informe um endereço HTTP ou HTTPS para o álbum.";
-        if (input.Status == "Publicado" && (!Required(input.City, 100) || !Required(input.Kind, 80) || input.Price <= 0))
+        if (input.Rental is { } rental && (rental.MonthlyRent <= 0 ||
+            new decimal?[] { rental.MonthlyRent, rental.CondoFee, rental.MonthlyIptu, rental.Water,
+                rental.Electricity, rental.Gas, rental.OtherFees, rental.ServiceFee, rental.FireInsurance }.Any(value => value is { } amount &&
+                    (amount is < 0 or >= 10000000000000m || decimal.Round(amount, 2) != amount))))
+            return "Informe aluguel mensal positivo e despesas com valores válidos.";
+        if (input.Status == "Publicado" && (!Required(input.City, 100) || !Required(input.Kind, 80) || (input.Price <= 0 && input.Rental is null)))
             return "Preencha cidade, tipo e preço para publicar.";
         return null;
     }

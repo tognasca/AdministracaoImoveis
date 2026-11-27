@@ -62,7 +62,7 @@ sealed class MediaStore(NpgsqlDataSource db, IConfiguration configuration)
     {
         await using var command = db.CreateCommand("""
             SELECT f.content_type FROM photos f JOIN properties p ON p.id=f.property_id
-            WHERE f.property_id=@property AND f.id=@id AND p.tenant_id=@tenant AND (@admin OR p.status='Publicado')
+            WHERE f.property_id=@property AND f.id=@id AND p.tenant_id=@tenant AND (@admin OR imoveis_property_visible(p))
             """);
         command.Parameters.AddWithValue("property", property);
         command.Parameters.AddWithValue("id", id);

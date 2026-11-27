@@ -1,7 +1,7 @@
 import {app, escape, notice, report} from './ui.js';
 import {storefrontTheme} from './storefront-theme.js';
 import {request} from './api.js';
-import {adminNav, bindLogout, getSession} from './admin-ui.js';
+import {adminNav, bindLogout, getSession, sectionNav, bindSections} from './admin-ui.js';
 import {optimizeImage} from './image.js';
 
 const endpoint = '/api/admin/vitrine/';
@@ -19,7 +19,7 @@ function imageForm({key,title,label}, url) {
     '</div></form></section>';
 }
 
-export async function showSettings(isCurrent) {
+export async function showSettings(isCurrent, activeSection = "settings-identity") {
   const allowed = getSession()?.administrator;
   const settings = allowed ? await request('/api/vitrine/configuracao') : null;
   const themes = allowed ? await request(endpoint + 'tema/editor') : null;
@@ -27,8 +27,9 @@ export async function showSettings(isCurrent) {
   const external = allowed ? await request(endpoint + 'publicacao-externa') : null;
   if (!isCurrent()) return;
 
-  app.innerHTML = adminNav() + '<h2>Configurações da vitrine</h2>' + notice +
-    (allowed ? '<section class="box"><h3>Modelo visual da imobiliária</h3><p class="muted">Pré-visualize os imóveis publicados no modelo escolhido.</p><form id="template-form"><label>Modelo<select name="template">' +
+  const sections = [['settings-identity','Identidade e vitrine'],['settings-team','Equipe'],['settings-channels','Canais de publicação']];
+  app.innerHTML = adminNav() + '<h1>Configurações</h1>' + notice +
+    (allowed ? sectionNav(sections)+'<div id="settings-identity"><section class="box"><h3>Modelo visual da imobiliária</h3><p class="muted">Pré-visualize os imóveis publicados no modelo escolhido.</p><form id="template-form"><label>Modelo<select name="template">' +
       [['premium','Luxury'],['minimal','Minimalista'],['modern','Moderno'],['commercial','Corporativo'],['boutique','Boutique']].map(([value,label]) =>
         '<option value="' + value + '"' + (value === selectedTheme.template ? ' selected' : '') + '>' + label + '</option>').join('') +
       '</select></label><label>Cor principal<input name="accentColor" type="color" value="' + escape(selectedTheme.accentColor) + '"></label><div class="row"><button>Publicar modelo</button><button type="button" class="alt" id="theme-draft">Salvar rascunho</button>' +
@@ -54,20 +55,26 @@ export async function showSettings(isCurrent) {
       escape(settings.email) + '"></label><label>WhatsApp com código do país e DDD<input name="whatsapp" type="tel" inputmode="numeric" ' +
       'pattern="[0-9]{10,15}" maxlength="15" placeholder="5511999999999" value="' + escape(settings.whatsapp) + '"></label></div>' +
       '<div class="row"><button>Salvar identidade</button></div></form></section>' +
-      (external?.enabled ? '<section class="box"><h3>Vitrine na sua hospedagem</h3>' +
-        '<p>Extraia o ZIP na pasta onde deseja publicar a vitrine. Os imóveis e a identidade visual são carregados deste sistema.</p>' +
-        '<a class="btn" href="/api/admin/vitrine/pacote" download>Baixar arquivos da vitrine</a></section>' : '') +
-      images.map(asset => imageForm(asset, asset.key === 'banner' ? settings.defaultBanner : settings[asset.key])).join('') :
+      images.map(asset => imageForm(asset, asset.key === 'banner' ? settings.defaultBanner : settings[asset.key])).join('')+'</div>'+
+      '<section class="box" id="settings-team"><h3>Equipe e acesso</h3>'+
+      '<a class="btn alt" href="/#usuarios">Gerenciar usuários e permissões</a></section>'+
+      '<div id="settings-channels"><section class="box"><h3>Catálogo para sites parceiros</h3>'+
+      '<a class="btn alt" href="/docs/catalogo" target="_blank" rel="noopener noreferrer">Abrir documentação da API</a></section>'+
+      (external?.enabled ? '<section class="box"><h3>Vitrine na sua hospedagem</h3>'+
+        '<p>Baixe o pacote para usar o catálogo e a identidade da imobiliária no seu domínio.</p>'+
+        '<a class="btn" href="/api/admin/vitrine/pacote" download>Baixar arquivos da vitrine</a></section>' : '')+'</div>' :
       '<p>Acesso restrito a administradores.</p>');
   bindLogout();
   if (!allowed) return;
+  const nav = app.querySelector('.workspace-sections');
+  bindSections(nav,activeSection);
 
   async function change(action, message) {
     const controls = [...app.querySelectorAll('#template-form :is(button,input,select), #brand-form :is(button,input,select), #logo-form :is(button,input,select), #banner-form :is(button,input,select), #hero-settings :is(button,input,select)')];
     controls.forEach(control => { control.disabled = true; });
     try {
       await action();
-      if (isCurrent()) { await showSettings(isCurrent); if (isCurrent()) report(message); }
+      if (isCurrent()) { await showSettings(isCurrent,nav.querySelector('[aria-pressed="true"]').dataset.section); if (isCurrent()) report(message); }
     } catch (error) { if (isCurrent()) report(error.message); }
     finally { controls.forEach(control => { control.disabled = false; }); }
   }

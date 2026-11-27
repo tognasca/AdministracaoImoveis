@@ -5,7 +5,9 @@ record LeadInput(Guid? PropertyId, string Name, string? Email, string? Phone, st
 record LeadView(Guid Id, Guid? PropertyId, string Name, string? Email, string? Phone,
     string Status, Guid? AssignedTo, string? Notes, DateTime CreatedAt, string? PropertyCode, string? PropertyTitle, DateTime? FirstContactAt, DateTime? VisitAt, string? VisitState);
 
-record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt);
+record LeadStageEvent(string Status, string ChangedBy, DateTime CreatedAt, string? Action, decimal? CounterofferPrice);
+
+record LeadNegotiation(string Action, decimal? Price);
 
 static class LeadEndpoints
 {
@@ -169,7 +171,7 @@ static class LeadEndpoints
         group.MapGet("/{id:guid}/historico", async (Guid id, NpgsqlDataSource db, TenantContext tenant, CancellationToken ct) =>
         {
             await using var command = db.CreateCommand("""
-                SELECT event.status, staff.username, event.created_at
+                SELECT event.status, staff.username, event.created_at, event.action, event.counteroffer_price
                 FROM saas_leads lead
                 LEFT JOIN saas_lead_stage_history event ON event.tenant_id=lead.tenant_id AND event.lead_id=lead.id
                 LEFT JOIN staff_users staff ON staff.tenant_id=event.tenant_id AND staff.id=event.changed_by
@@ -183,7 +185,8 @@ static class LeadEndpoints
             var events = new List<LeadStageEvent>();
             do
             {
-                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.IsDBNull(1) ? "Vitrine" : reader.GetString(1), reader.GetDateTime(2)));
+                if (!reader.IsDBNull(0)) events.Add(new(reader.GetString(0), reader.IsDBNull(1) ? "Vitrine" : reader.GetString(1), reader.GetDateTime(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3), reader.IsDBNull(4) ? null : reader.GetDecimal(4)));
             } while (await reader.ReadAsync(ct));
             return Results.Ok(events);
         });

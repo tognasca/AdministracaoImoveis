@@ -1,3 +1,4 @@
+import {listingPrice, rentalCosts} from './rental.js';
 import {app, escape, money} from './ui.js';
 
 import {catalogPhoto, catalogRequest, storefrontHref} from './public-catalog.js';
@@ -62,6 +63,8 @@ function bindGallery(home) {
 
 export function propertyDetail(home, settings, locationText) {
   const d = home.data;
+  const areaQuery = [d.district,d.city].filter(Boolean).join(', ');
+  const mapLink = areaQuery ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(areaQuery) : '';
   const facts = [
     ['Tipo de imóvel', d.kind],
     ['Zona', d.zone],
@@ -71,11 +74,19 @@ export function propertyDetail(home, settings, locationText) {
   ].filter(([, value]) => value);
   const whatsapp = /^[0-9]{10,15}$/.test(settings.whatsapp) ? settings.whatsapp : '';
   const email = settings.email || '';
+  const canPropose = d.price > 0 || Boolean(d.rental);
+  const actions = '<div class="row"><button type="button" class="alt" data-interest-kind="visit">Agendar visita</button>' +
+    (canPropose ? '<button type="button" class="alt" data-interest-kind="proposal">Fazer proposta</button>' : '') + '</div>';
   const contact = '<form class="property-contact-form" id="property-contact-form">' +
-    '<h2>Tenho interesse</h2><label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
+    '<h2 id="property-contact-title">Tenho interesse</h2>'+actions+'<label>Seu nome<input name="contactName" autocomplete="name" maxlength="100" required></label>' +
     '<label>Telefone ou WhatsApp<input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>' +
     '<label>E-mail<input name="email" type="email" autocomplete="email" maxlength="254"></label>' +
     '<p class="property-contact-hint">Informe pelo menos um canal de retorno. A imobiliária usará seus dados para responder sobre este imóvel.</p>' +
+    '<fieldset id="property-visit-fields" hidden disabled><label>Data de preferência<input type="date" name="visitDate" required></label><p>A imobiliária confirmará a disponibilidade.</p></fieldset>' +
+    '<fieldset id="property-proposal-fields" hidden disabled><label>Operação<select name="operation">' +
+    (d.price > 0 ? '<option value="sale">Compra</option>' : '') +
+    (d.rental ? '<option value="rent">Locação</option>' : '') +
+    '</select></label><label id="property-proposed-price">Valor proposto (R$)<input name="proposedPrice" type="number" min="0.01" max="9999999999999.99" step="0.01" required></label></fieldset>' +
     '<label>Sua mensagem (opcional)<textarea name="message" rows="3" maxlength="800" placeholder="Quero saber mais sobre este imóvel."></textarea></label>' +
     '<button type="submit" class="btn">Enviar interesse</button>' +
     '<p class="property-contact-hint" id="property-contact-status" role="status"></p>' +
@@ -94,12 +105,16 @@ export function propertyDetail(home, settings, locationText) {
     '<button type="button" class="alt" id="property-share">Compartilhar</button></div>'+
     '<small role="status" id="property-action-status"></small></div></header>' +
     '<div class="property-layout"><section class="property-gallery" aria-label="Fotos do imóvel">' + gallery(home) + '</section>' +
-    '<aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price"><p>Valor do imóvel</p>' +
-    '<strong>' + money(d.price) + '</strong></div>' +
+    '<aside class="property-inquiry" aria-label="Preço e contato"><div class="property-price">' +
+    (d.price > 0 || !d.rental ? '<p>Valor de venda</p><strong>'+money(d.price)+'</strong>' : '') +
+    (d.rental ? rentalCosts(d.rental) : '') + '</div>' +
     contact + (album ? '<div class="estate-contact">' + album + '</div>' : '') + '</aside>' +
-    (facts.length ? '<section class="property-characteristics"><h2>Características</h2><dl>' + facts.map(([label, value]) =>
+    (facts.length || mapLink ? '<section class="property-characteristics">' +
+      (mapLink ? '<a class="property-area-link" href="'+escape(mapLink)+'" target="_blank" rel="noopener noreferrer">'+
+        '<span><small>Localização aproximada</small><strong>'+escape(areaQuery)+'</strong></span><span>Ver região ↗</span></a>' : '') +
+      '<h2>Características</h2><dl>' + facts.map(([label, value]) =>
       '<div><dt>' + label + '</dt><dd>' + escape(value) + '</dd></div>').join('') + '</dl></section>' : '') +
-    '</div></div><div class="property-mobile-contact"><strong>'+money(d.price)+'</strong>'+
+    '</div></div><div class="property-mobile-contact"><strong>'+listingPrice(d)+'</strong>'+
     '<a class="btn" href="#property-contact-form" id="property-contact-shortcut">Tenho interesse</a></div>';
   bindGallery(home);
   const favorite = app.querySelector('#property-favorite');
@@ -136,6 +151,25 @@ export function propertyDetail(home, settings, locationText) {
   const contactStatus = form.querySelector('#property-contact-status');
   const submit = form.querySelector('button[type=submit]');
   let submissionId;
+  let requestKind = null;
+  const visitFields = form.querySelector('#property-visit-fields');
+  const proposalFields = form.querySelector('#property-proposal-fields');
+  const title = form.querySelector('#property-contact-title');
+  const contactLabels = {visit:['Agendar visita','Enviar pedido de visita'],proposal:['Fazer proposta','Enviar proposta']};
+  const selectKind = kind => {
+    if (submit.dataset.sending) return;
+    if (!submit.disabled && requestKind === kind) kind = null;
+    if (requestKind !== kind || submit.disabled) submissionId = undefined;
+    requestKind = kind;
+    visitFields.hidden = visitFields.disabled = kind !== 'visit';
+    proposalFields.hidden = proposalFields.disabled = kind !== 'proposal';
+    title.textContent = contactLabels[kind]?.[0] ?? 'Tenho interesse';
+    submit.textContent = contactLabels[kind]?.[1] ?? 'Enviar interesse';
+    submit.disabled = false;
+    contactStatus.textContent = '';
+  };
+  for (const button of form.querySelectorAll('[data-interest-kind]'))
+    button.onclick = () => selectKind(button.dataset.interestKind);
   form.onsubmit = async event => {
     event.preventDefault();
     if (submit.disabled) return;
@@ -146,19 +180,24 @@ export function propertyDetail(home, settings, locationText) {
       return;
     }
     submit.disabled = true;
+    submit.dataset.sending = 'true';
     contactStatus.textContent = 'Enviando…';
     try {
       submissionId ??= crypto.randomUUID();
       await catalogRequest('/api/imoveis/'+encodeURIComponent(home.id)+'/interesse','POST',{
-        submissionId,name:contactName.value,email:contactEmail.value,phone:phone.value,message:message.value
+        submissionId,name:contactName.value,email:contactEmail.value,phone:phone.value,message:message.value,
+        requestKind,
+        preferredVisitDate:requestKind === 'visit' ? form.elements.visitDate.value : null,
+        proposalOperation:requestKind === 'proposal' ? form.elements.operation.value : null,
+        proposedPrice:requestKind === 'proposal' ? Number(form.elements.proposedPrice.value) : null
       });
       form.reset();
-      submit.textContent = 'Interesse enviado';
-      contactStatus.textContent = 'A imobiliária recebeu seu contato.';
+      submit.textContent = requestKind === 'proposal' ? 'Proposta enviada' : 'Solicitação enviada';
+      contactStatus.textContent = requestKind === 'visit' ? 'Pedido enviado. Aguarde a confirmação da imobiliária.' : requestKind === 'proposal' ? 'A imobiliária recebeu sua proposta.' : 'A imobiliária recebeu seu contato.';
     } catch (error) {
       contactStatus.textContent = error.message;
       submit.disabled = false;
-    }
+    } finally { delete submit.dataset.sending; }
   };
   form.addEventListener('input', () => form.elements.phone.setCustomValidity(''));
   for (const button of form.querySelectorAll('[data-contact-channel]')) {

@@ -1,25 +1,36 @@
 using Npgsql;
+using System.Text.Json;
+
+record RentalTerms(decimal MonthlyRent, decimal? CondoFee, decimal? MonthlyIptu,
+    decimal? Water, decimal? Electricity, decimal? Gas, decimal? OtherFees,
+    decimal? ServiceFee = null, decimal? FireInsurance = null);
 
 record PropertyInput(string Code, string Source, string Title, string Kind, string District, string City,
-    decimal Price, int Bedrooms, decimal Size, string Status, string? Album, int Version, Guid? CategoryId = null, string? Notes = null, string? Zone = null);
-record Property(Guid Id, PropertyInput Data, Guid[] Photos);
+    decimal Price, int Bedrooms, decimal Size, string Status, string? Album, int Version, Guid? CategoryId = null, string? Notes = null, string? Zone = null, RentalTerms? Rental = null);
+record Property(Guid Id, PropertyInput Data, Guid[] Photos, DateTime? ModifiedAt = null);
 
 sealed class PropertyStore(NpgsqlDataSource db)
 {
     private const string Columns = """
-        p.id, p.code, p.source, p.title, p.kind, p.district, p.city, p.price, p.bedrooms,
+        p.id, p.code, p.source, p.title, p.kind, p.district, p.city,
+        CASE WHEN @admin OR imoveis_offer_visible(p.sale_availability,p.sale_reserved_until) THEN p.price ELSE 0 END, p.bedrooms,
         p.size, p.status, p.album, p.version, p.category_id, CASE WHEN @admin THEN p.notes END,
-        ARRAY(SELECT id FROM photos WHERE property_id=p.id ORDER BY slot), p.zone
+        ARRAY(SELECT id FROM photos WHERE property_id=p.id ORDER BY slot), p.zone, CASE WHEN @admin OR imoveis_offer_visible(p.rent_availability,p.rent_reserved_until) THEN p.rental END, p.modified_at
         """;
 
-    public async Task<List<Property>> Get(bool admin, Guid? id, string search, int page, CancellationToken ct, string kind = "", decimal maxPrice = 0, int bedrooms = 0, Guid? category = null, bool gallery = false, Guid? tenantId = null)
+    public async Task<List<Property>> Get(bool admin, Guid? id, string search, int page, CancellationToken ct, string kind = "", decimal maxPrice = 0, int bedrooms = 0, Guid? category = null, bool gallery = false, Guid? tenantId = null, string operation = "", string status = "", string city = "")
     {
         await using var command = db.CreateCommand($"""
             SELECT {Columns} FROM properties p
-            WHERE p.tenant_id=@tenant AND (@admin OR status='Publicado') AND (@all OR p.id=@id)
+            WHERE p.tenant_id=@tenant AND (@admin OR imoveis_property_visible(p)) AND (@all OR p.id=@id)
               AND (@search='' OR concat_ws(' ',title,city,district,zone,code) ILIKE @pattern)
+              AND (@status='' OR p.status=@status)
+              AND (@city='' OR lower(p.city)=lower(@city))
+              AND (@operation='' OR (@operation='venda' AND (p.price>0 OR p.rental IS NULL))
+                  OR (@operation='locacao' AND p.rental IS NOT NULL))
               AND (@kind='' OR lower(kind)=lower(@kind))
-              AND (@max_price=0 OR price<=@max_price)
+              AND (@max_price=0 OR (price>0 AND price<=@max_price AND (@admin OR imoveis_offer_visible(p.sale_availability,p.sale_reserved_until)))
+                  OR ((p.rental->>'MonthlyRent')::numeric<=@max_price AND (@admin OR imoveis_offer_visible(p.rent_availability,p.rent_reserved_until))))
               AND (@bedrooms=0 OR bedrooms>=@bedrooms)
               AND (@category IS NULL OR EXISTS (
                   SELECT 1 FROM storefront_menu m WHERE m.id=@category AND m.id=p.category_id AND m.tenant_id=p.tenant_id AND m.visible AND m.kind='category'))
@@ -33,6 +44,9 @@ sealed class PropertyStore(NpgsqlDataSource db)
         command.Parameters.AddWithValue("search", search);
         command.Parameters.AddWithValue("pattern", "%" + search + "%");
         command.Parameters.AddWithValue("kind", kind);
+        command.Parameters.AddWithValue("status", status);
+        command.Parameters.AddWithValue("city", city);
+        command.Parameters.AddWithValue("operation", operation);
         command.Parameters.AddWithValue("max_price", maxPrice);
         command.Parameters.AddWithValue("bedrooms", bedrooms);
         command.Parameters.AddWithValue("category", NpgsqlTypes.NpgsqlDbType.Uuid, (object?)category ?? DBNull.Value);
@@ -47,15 +61,29 @@ sealed class PropertyStore(NpgsqlDataSource db)
                 reader.IsDBNull(11) ? null : reader.GetString(11), reader.GetInt32(12),
                 reader.IsDBNull(13) ? null : reader.GetGuid(13),
                 reader.IsDBNull(14) ? null : reader.GetString(14),
-                reader.IsDBNull(16) ? null : reader.GetString(16)), reader.GetFieldValue<Guid[]>(15)));
+                reader.IsDBNull(16) ? null : reader.GetString(16),
+                reader.IsDBNull(17) ? null : JsonSerializer.Deserialize<RentalTerms>(reader.GetString(17))), reader.GetFieldValue<Guid[]>(15), admin ? reader.GetDateTime(18) : null));
         return result;
+    }
+
+    public async Task<List<string>> ListCities(Guid tenantId, CancellationToken ct)
+    {
+        await using var command = db.CreateCommand("""
+            SELECT min(city) FROM properties WHERE tenant_id=@tenant AND btrim(city)<>''
+            GROUP BY lower(city) ORDER BY lower(city)
+            """);
+        command.Parameters.AddWithValue("tenant",tenantId);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        var cities = new List<string>();
+        while (await reader.ReadAsync(ct)) cities.Add(reader.GetString(0));
+        return cities;
     }
 
     public async Task<List<string>> ListKinds(bool admin, CancellationToken ct, Guid? tenantId = null)
     {
         await using var command = db.CreateCommand("""
-            SELECT min(kind) FROM properties
-            WHERE tenant_id=@tenant AND (@admin OR status='Publicado') AND btrim(kind) <> ''
+            SELECT min(kind) FROM properties p
+            WHERE tenant_id=@tenant AND (@admin OR imoveis_property_visible(p)) AND btrim(kind) <> ''
             GROUP BY lower(kind) ORDER BY lower(kind)
             """);
         command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
@@ -71,7 +99,7 @@ sealed class PropertyStore(NpgsqlDataSource db)
         await using var command = db.CreateCommand("""
             UPDATE properties
                SET status = 'Publicado', version = version + 1
-             WHERE tenant_id=@tenant AND status = 'Rascunho' AND btrim(city) <> '' AND btrim(kind) <> '' AND price > 0
+             WHERE tenant_id=@tenant AND status = 'Rascunho' AND btrim(city) <> '' AND btrim(kind) <> '' AND (price > 0 OR COALESCE((rental->>'MonthlyRent')::numeric, 0) > 0)
             """);
         command.Parameters.AddWithValue("tenant", tenantId ?? TenantContext.LegacyId);
         return await command.ExecuteNonQueryAsync(ct);
@@ -87,11 +115,11 @@ sealed class PropertyStore(NpgsqlDataSource db)
         NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct, Guid tenantId)
     {
         await using var command = new NpgsqlCommand(create ? """
-            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone,tenant_id)
-            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''),@tenant)
+            INSERT INTO properties(id,code,source,title,kind,district,city,price,bedrooms,size,status,album,category_id,notes,zone,tenant_id,rental)
+            VALUES(@id,@code,@source,@title,@kind,@district,@city,@price,@bedrooms,@size,@status,@album,@category,NULLIF(@notes,''),NULLIF(@zone,''),@tenant,@rental)
             """ : """
             UPDATE properties SET code=@code,source=@source,title=@title,kind=@kind,district=@district,
-                city=@city,price=@price,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,
+                city=@city,price=@price,rental=@rental,bedrooms=@bedrooms,size=@size,status=@status,album=@album,category_id=@category,
                 zone=CASE WHEN @zone IS NULL THEN zone ELSE NULLIF(@zone,'') END,
                 notes=CASE WHEN @notes IS NULL THEN notes ELSE NULLIF(@notes,'') END,version=version+1
             WHERE id=@id AND tenant_id=@tenant AND version=@version
@@ -115,6 +143,8 @@ sealed class PropertyStore(NpgsqlDataSource db)
             (object?)input.Notes?.Trim() ?? DBNull.Value);
         command.Parameters.AddWithValue("zone", NpgsqlTypes.NpgsqlDbType.Text,
             (object?)input.Zone?.Trim() ?? DBNull.Value);
+        command.Parameters.AddWithValue("rental", NpgsqlTypes.NpgsqlDbType.Jsonb,
+            input.Rental is null ? DBNull.Value : JsonSerializer.Serialize(input.Rental));
         command.Parameters.AddWithValue("version", input.Version);
         return await command.ExecuteNonQueryAsync(ct) == 1;
     }

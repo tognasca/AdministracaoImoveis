@@ -1,9 +1,12 @@
-import {app,escape,notice,report} from './ui.js';
-import {adminNav,bindLogout} from './admin-ui.js';
+import {app,escape,notice,report,money} from './ui.js';
+import {adminNav,bindLogout,closePropertyOffer} from './admin-ui.js';
 import {request} from './api.js';
 
 const crmPath = '/api/admin/crm/leads';
 const stages = [['new','Novo'],['contacted','Em contato'],['visit','Visita'],['proposal','Proposta'],['won','Fechado'],['lost','Perdido']];
+const negotiationLabels = {counteroffer:'Contraproposta',accepted:'Proposta aceita',declined:'Proposta recusada','visit-confirmed':'Visita confirmada'};
+const negotiationOptions = kind => (kind === 'visit' ? ['visit-confirmed'] : ['counteroffer','accepted','declined'])
+  .map(action => '<option value="'+action+'">'+negotiationLabels[action]+'</option>').join('');
 const stageOptions = selected => stages.map(([value,label]) =>
   '<option value="'+value+'"'+(selected===value?' selected':'')+'>'+label+'</option>').join('');
 
@@ -72,15 +75,15 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
     const values = Object.fromEntries(new FormData(form));
     return {...values, propertyId:values.propertyId || null, assignedTo:values.assignedTo || null};
   };
-  app.innerHTML = adminNav() + '<h2>CRM · Contatos interessados</h2>' + notice +
+  app.innerHTML = adminNav() + '<h1>CRM</h1>' + notice +
     '<p class="muted">Organize contatos, visitas e propostas sem sair do painel.</p>' +
-    '<section class="box"><h3>Novo contato</h3><form id="lead-new">' +
+    '<details class="box"><summary>Novo contato</summary><form id="lead-new">' +
     '<div class="grid"><label>Nome<input name="name" required maxlength="160"></label>' +
     '<label>E-mail<input name="email" type="email" maxlength="254"></label>' +
     '<label>Telefone<input name="phone" type="tel" maxlength="40"></label>' +
     '<label>Etapa<select name="status">'+stageOptions('new')+'</select></label></div>' +
     links()+'<label>Observações<textarea name="notes" maxlength="4000"></textarea></label>' +
-    '<button>Adicionar contato</button></form></section>' +
+    '<button>Adicionar contato</button></form></details>' +
     '<section class="crm-pipeline"><h3>Fila de atendimento</h3>' +
     '<form id="crm-filters" class="box"><div class="grid"><label>Exibir<select name="queue">'+
     '<option value="true"'+(params.queue?' selected':'')+'>Novos sem responsável</option>'+
@@ -91,10 +94,15 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
     '<option value="unassigned">Sem responsável</option>'+staff.map(user =>
       '<option value="'+escape(user.id)+'">'+escape(user.username)+'</option>').join('')+'</select></label></div>'+
     '<div class="row"><button type="submit">Aplicar filtros</button></div></form>'+
-    '<div class="crm-board">'+columns.map(([stage,label]) => '<section class="box crm-stage" data-stage="'+stage+'">' +
-      '<h4>'+label+' <span class="chips"></span></h4><p class="muted crm-stage-empty">Nenhum contato nesta etapa.</p>' +
-      leads.filter(lead => lead.status === stage).map(lead =>
-      '<form class="crm-lead" data-assignee="'+escape(lead.assignedTo)+'" data-id="'+escape(lead.id)+'"><div><strong>'+escape(lead.name)+'</strong>' +
+    '<div class="crm-split"><aside class="box crm-inbox" aria-label="Lista de contatos">'+
+      (leads.length ? leads.map(lead => '<button type="button" class="alt crm-inbox-item" data-lead="'+escape(lead.id)+
+        '" aria-pressed="'+(lead===selected)+'"><strong>'+escape(lead.name)+'</strong><small>'+
+        escape(lead.propertyTitle || 'Sem imóvel vinculado')+'</small><small>'+
+        escape(stages.find(([value])=>value===lead.status)?.[1])+'</small></button>').join('') :
+        '<p>Nenhum contato corresponde aos filtros.</p>')+'</aside><div class="crm-detail">'+
+      leads.map(lead =>
+      '<form class="box crm-lead"'+(lead===selected ? '' : ' hidden')+' data-assignee="'+escape(lead.assignedTo)+'" data-id="'+escape(lead.id)+'"><div><strong>'+escape(lead.name)+'</strong>' +
+      '<p class="muted">Última atualização: '+escape(new Date(lead.updatedAt).toLocaleString('pt-BR'))+'</p>'+
       (lead.email?'<p>'+escape(lead.email)+'</p>':'') +
       (lead.phone?'<p>'+escape(lead.phone)+'</p>':'') +
       (lead.status === 'new' && !lead.assignedTo ? '<p class="chips crm-wait">'+waitingSince(lead.createdAt)+'</p>' : '') +
@@ -104,7 +112,12 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
       '</div><label>Etapa<select name="status">'+stageOptions(lead.status)+'</select></label>' +
       links(lead)+'<label>Observações<textarea name="notes" maxlength="4000" rows="2">'+escape(lead.notes)+'</textarea></label>' +
       '<div><button type="submit" class="alt">Salvar</button>' +
-      '<details class="lead-history"><summary>Histórico de etapas</summary><ol></ol></details></div></form>').join('')+'</section>').join('')+'</div></section>';
+      (lead.requestKind ? '<div class="row"><label>Registrar negociação<select name="negotiationAction">'+
+        negotiationOptions(lead.requestKind)+'</select></label><label'+(lead.requestKind === 'visit' ? ' hidden' : '')+
+        '>Valor da contraproposta (R$)<input name="counterofferPrice" type="number" min="0.01" step="0.01"'+
+        (lead.requestKind === 'visit' ? ' disabled' : '')+'></label><button type="button" class="alt" data-negotiation>'+
+        (lead.requestKind === 'visit' ? 'Confirmar visita' : 'Registrar contraproposta')+'</button></div>' : '') +
+      '<details class="lead-history"><summary>Histórico de atendimento</summary><ol></ol></details></div></form>').join('')+'</div></div></section>';
   const pipeline = app.querySelector('.crm-pipeline');
   pipeline.insertAdjacentHTML('beforeend','<div class="row"><span>Página '+(params.page+1)+'</span>'+
     '<button type="button" class="alt" data-crm-page="previous"'+(params.page===0?' disabled':'')+'>Anterior</button>'+
@@ -123,11 +136,15 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
   };
   for (const button of pipeline.querySelectorAll('[data-crm-page]'))
     button.onclick = () => navigate({...params,page:params.page+(button.dataset.crmPage==='next'?1:-1)});
-  for (const column of pipeline.querySelectorAll('.crm-stage')) {
-    const count = column.querySelectorAll('.crm-lead').length;
-    column.querySelector('.chips').textContent = count;
-    column.querySelector('.crm-stage-empty').hidden = count > 0;
-  }
+  const contactButtons = [...pipeline.querySelectorAll('[data-lead]')];
+  const contactForms = [...pipeline.querySelectorAll('.crm-lead')];
+  for (const button of contactButtons) button.onclick = () => {
+    const id = button.dataset.lead;
+    for (const item of contactButtons) item.setAttribute('aria-pressed',String(item === button));
+    for (const form of contactForms) form.hidden = form.dataset.id !== id;
+    if (matchMedia('(max-width:820px)').matches)
+      contactForms.find(form => form.dataset.id===id)?.scrollIntoView({block:'nearest'});
+  };
   for (const button of app.querySelectorAll('.crm-property-find')) {
     const form = button.form;
     const search = form.querySelector('.crm-property-search');
@@ -194,11 +211,50 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
       try {
         const items = await request(crmPath+'/'+encodeURIComponent(form.dataset.id)+'/historico');
         events.innerHTML = items.length ? items.map(item =>
-          '<li>'+escape(stages.find(([value]) => value === item.status)?.[1])+
+          '<li>'+escape(negotiationLabels[item.action] ?? stages.find(([value]) => value === item.status)?.[1])+
+          (item.counterofferPrice == null ? '' : ' · '+money(item.counterofferPrice))+
           ' · '+escape(item.changedBy)+' · '+escape(new Date(item.createdAt).toLocaleString('pt-BR'))+'</li>'
         ).join('') : '<li>Nenhuma mudança registrada.</li>';
       } catch (error) { events.innerHTML = '<li>'+escape(error.message)+'</li>'; }
     };
+    const closeOffer = form.querySelector('[data-close-offer]');
+    if (closeOffer) closeOffer.onclick = async () => {
+      const lead = leads.find(item=>item.id===form.dataset.id);
+      if (!window.confirm('Encerrar a divulgação desta operação na vitrine?')) return;
+      closeOffer.disabled = true;
+      try {
+        await closePropertyOffer(lead.propertyId,lead.proposalOperation);
+        if (isCurrent()) report('Oferta encerrada.');
+      } catch (error) { if (isCurrent()) { report(error.message); closeOffer.disabled = false; } }
+    };
+    const negotiation = form.querySelector('[data-negotiation]');
+    if (negotiation) {
+      const actionField = form.elements.negotiationAction;
+      const priceField = form.elements.counterofferPrice;
+      actionField.onchange = () => {
+        priceField.disabled = priceField.closest('label').hidden = actionField.value !== 'counteroffer';
+        negotiation.textContent = {counteroffer:'Registrar contraproposta',accepted:'Registrar aceite',declined:'Registrar recusa'}[actionField.value] ?? 'Confirmar visita';
+      };
+      negotiation.onclick = async () => {
+        const action = actionField.value;
+        if (action === 'counteroffer' && (!priceField.value || !priceField.reportValidity())) {
+          report('Informe um valor válido para a contraproposta.');
+          return;
+        }
+        negotiation.disabled = true;
+        try {
+          await request(crmPath+'/'+encodeURIComponent(form.dataset.id)+'/negociacao','POST',{
+            action,price:action === 'counteroffer' ? Number(priceField.value) : null
+          });
+          if (!isCurrent()) return;
+          priceField.value = '';
+          if (history.open) await loadHistory();
+          else history.open = true;
+          report('Ação registrada no histórico.');
+        } catch (error) { if (isCurrent()) report(error.message); }
+        finally { negotiation.disabled = false; }
+      };
+    }
     history.ontoggle = loadHistory;
     form.onsubmit = async event => {
       event.preventDefault();
@@ -211,7 +267,7 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
           name:lead.name,email:lead.email,phone:lead.phone,...formData(form)
         });
         if(isCurrent()) {
-          await crm(isActive,params);
+          await crm(isActive,{...params,selected:lead.id});
           if (isActive()) report('Contato atualizado.');
         }
       } catch(error) { if(isCurrent()) report(error.message); }

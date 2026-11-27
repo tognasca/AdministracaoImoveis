@@ -3,7 +3,8 @@ using Npgsql;
 
 static class PublicLeadEndpoints
 {
-    internal sealed record InterestInput(Guid SubmissionId, string? Name, string? Email, string? Phone, string? Message);
+    internal sealed record InterestInput(Guid SubmissionId, string? Name, string? Email, string? Phone, string? Message,
+        string? RequestKind = null, DateOnly? PreferredVisitDate = null, string? ProposalOperation = null, decimal? ProposedPrice = null);
 
     public static async Task<IResult> Register(Guid property, Guid tenant, InterestInput input,
         NpgsqlDataSource db, CancellationToken ct)
@@ -25,13 +26,24 @@ static class PublicLeadEndpoints
         if (message.Length > 800)
             return Results.BadRequest("A mensagem pode ter até 800 caracteres.");
 
+        if (input.RequestKind is not (null or "visit" or "proposal"))
+            return Results.BadRequest("Selecione um tipo de contato válido.");
+        if (input.RequestKind == "visit" && input.PreferredVisitDate is null)
+            return Results.BadRequest("Informe a data de preferência para a visita.");
+        if (input.RequestKind == "proposal" && (input.ProposalOperation is not ("sale" or "rent") ||
+            input.ProposedPrice is not { } price || price is <= 0 or >= 10000000000000m ||
+            decimal.Round(price, 2) != price))
+            return Results.BadRequest("Informe a operação e um valor válido para a proposta.");
+
         await using var command = db.CreateCommand("""
             WITH published AS (
-                SELECT id FROM properties WHERE id=@property AND tenant_id=@tenant AND status='Publicado'
+                SELECT id FROM properties p WHERE id=@property AND tenant_id=@tenant AND imoveis_property_visible(p)
+                  AND (@operation IS NULL OR (@operation='rent' AND rental IS NOT NULL AND imoveis_offer_visible(rent_availability,rent_reserved_until))
+                    OR (@operation='sale' AND price>0 AND imoveis_offer_visible(sale_availability,sale_reserved_until)))
                 FOR SHARE
             ), created AS (
-                INSERT INTO saas_leads (id,tenant_id,property_id,name,email,phone,status,notes)
-                SELECT @id,@tenant,id,@name,nullif(@email,''),nullif(@phone,''),'new',nullif(@message,'')
+                INSERT INTO saas_leads (id,tenant_id,property_id,name,email,phone,status,notes,request_kind,preferred_visit_date,proposal_operation,proposed_price)
+                SELECT @id,@tenant,id,@name,nullif(@email,''),nullif(@phone,''),'new',nullif(@message,''),@kind,@visit_date,@operation,@proposed_price
                 FROM published
                 ON CONFLICT (id) DO NOTHING
                 RETURNING id
@@ -48,6 +60,13 @@ static class PublicLeadEndpoints
         command.Parameters.AddWithValue("email",email);
         command.Parameters.AddWithValue("phone",phone);
         command.Parameters.AddWithValue("message",message);
+        command.Parameters.AddWithValue("kind", NpgsqlTypes.NpgsqlDbType.Text, (object?)input.RequestKind ?? DBNull.Value);
+        command.Parameters.AddWithValue("visit_date", NpgsqlTypes.NpgsqlDbType.Date,
+            input.RequestKind == "visit" ? (object?)input.PreferredVisitDate ?? DBNull.Value : DBNull.Value);
+        command.Parameters.AddWithValue("operation", NpgsqlTypes.NpgsqlDbType.Text,
+            input.RequestKind == "proposal" ? (object?)input.ProposalOperation ?? DBNull.Value : DBNull.Value);
+        command.Parameters.AddWithValue("proposed_price", NpgsqlTypes.NpgsqlDbType.Numeric,
+            input.RequestKind == "proposal" ? (object?)input.ProposedPrice ?? DBNull.Value : DBNull.Value);
         return await command.ExecuteScalarAsync(ct) is true ? Results.NoContent() : Results.NotFound();
     }
 }

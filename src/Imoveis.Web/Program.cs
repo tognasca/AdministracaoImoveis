@@ -11,6 +11,7 @@ StorefrontAssetEndpoints.Map(app);
 SessionEndpoints.Map(app, admin);
 StaffEndpoints.Map(admin);
 PropertyEndpoints.Map(admin);
+AvailabilityEndpoints.Map(admin);
 MediaEndpoints.Map(admin);
 StorefrontEndpoints.Map(admin);
 SaasThemeEndpoints.Map(admin);
