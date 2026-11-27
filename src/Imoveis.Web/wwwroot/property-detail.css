@@ -74,30 +74,8 @@
   .property-mobile-contact .btn { min-height:44px; }
 }
 .property-similar { margin-top:clamp(28px,5vw,58px); }
-.property-similar h2 { font-size:clamp(1.35rem,2vw,1.75rem); margin-bottom:20px; }
+.property-similar h2 { font-size:clamp(1.75rem,3vw,2.6rem); margin-bottom:20px; }
 
-.property-area-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  margin-bottom: 20px;
-  padding: 14px 16px;
-  border: 1px solid var(--estate-rule);
-  border-inline-start: 3px solid var(--estate-accent);
-  border-radius: 10px;
-  text-decoration: none;
-}
-.property-area-link:hover { text-decoration: underline; text-underline-offset: 3px; }
-.property-area-link small { display: block; font-size: .78rem; }
-.property-area-link strong { font-size: 1.04rem; overflow-wrap: anywhere; }
-.property-area-link > span:last-child { font-size: .85rem; }
-.property-characteristics dl { gap: 8px; border: 0; background: transparent; }
-.property-characteristics dl > div {
-  border: 1px solid var(--estate-rule);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--estate-ink);
-}
-.property-characteristics dt { color: inherit; }
+.estate-site .property-heading { background:var(--estate-panel); color:var(--estate-ink); padding:clamp(16px,3vw,36px); border:1px solid var(--estate-rule); border-radius:12px; }
+.estate-site .property-inquiry,.estate-site .property-characteristics dl > div { background:var(--estate-surface); }
+.estate-site .property-price p,.estate-site .property-characteristics dt { color:inherit; opacity:.84; }

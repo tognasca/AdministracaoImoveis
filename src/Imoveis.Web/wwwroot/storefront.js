@@ -26,12 +26,12 @@ function listingCard(home) {
   const cover = photo ? '<img class="listing-image" src="' + escape(catalogPhoto(home.id, photo)) +
     '" alt="" loading="lazy" decoding="async">' : '<span class="listing-placeholder">Sem foto cadastrada</span>';
   return '<article class="listing-card"><a class="listing-link" href="' + href + '">' +
-    '<div class="listing-cover' + (photo ? '' : ' listing-cover-empty') + '">' + cover + '</div>' +
-    '<div class="listing-caption">' +
+    '<div class="listing-cover' + (photo ? '' : ' listing-cover-empty') + '">' + cover +
+    '</div><div class="listing-body"><div class="listing-property-data">' +
     (d.kind ? '<p class="listing-kind">' + escape(d.kind) + '</p>' : '') +
     '<h3>' + escape(d.title) + '</h3>' +
-    (place ? '<p class="listing-location">' + place + '</p>' : '') + '</div>' +
-    '<div class="listing-body"><div class="listing-property-data"><strong>' + listingPrice(d) + '</strong>' +
+    (place ? '<p class="listing-location">' + place + '</p>' : '') +
+    '<strong>' + money(d.price) + '</strong>' +
     (features.length ? '<ul class="listing-facts">' + features.map(value => '<li>' + value + '</li>').join('') + '</ul>' : '') +
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }
@@ -52,7 +52,12 @@ function showPreviewBanner() {
   replacement.onload = () => hero.classList.remove('estate-hero-plain');
   replacement.onerror = () => {
     banner.remove();
-    hero.classList.add('estate-hero-plain');
+    const fallback = hero.dataset.fallbackImage;
+    if (fallback) {
+      replacement.onerror = () => { banner.remove(); hero.classList.add('estate-hero-plain'); };
+      replacement.src = fallback;
+      hero.prepend(banner);
+    } else hero.classList.add('estate-hero-plain');
   };
   banner.append(replacement);
   hero.prepend(banner);
@@ -139,16 +144,22 @@ export async function storefront(params, isCurrent) {
   const heading = sectionTitle || (category ? 'Categoria de imóveis' : gallery ? 'Galeria' :
     values.size ? 'Resultados da busca' : 'Imóveis disponíveis');
 
-  const banner = settings.banner;
-  app.innerHTML = '<section class="estate-hero' + (banner ? '' : ' estate-hero-plain') + '">' +
-    (banner ? '<div class="estate-banner"><img src="' + escape(catalogMedia(banner)) + '" alt="" fetchpriority="high"></div>' : '') +
-    '<div class="estate-hero-copy"><h1>Encontre seu próximo imóvel</h1>' +
+  const featured = !values.size && !category && !gallery && page === 1 ? homes.find(home => home.photos.length) : null;
+  const featuredImage = featured ? catalogPhoto(featured.id, featured.photos[0]) : '';
+  const banner = settings.banner ? catalogMedia(settings.banner) : featuredImage;
+  app.innerHTML = '<section class="estate-hero' + (banner ? '' : ' estate-hero-plain') + '" data-fallback-image="' + escape(featuredImage) + '">' +
+    (banner ? '<div class="estate-banner"><img src="' + escape(banner) + '" alt="" fetchpriority="high"></div>' : '') +
+    '<div class="estate-hero-copy"><p class="estate-hero-brand">' + escape(settings.name || 'Imóveis Cotia') + '</p>' +
+    '<h1>Encontre seu próximo imóvel</h1>' +
+    (featured && !settings.banner ? '<a class="estate-hero-link" href="' + storefrontHref('imovel/' + encodeURIComponent(featured.id)) +
+      '">Conhecer imóvel em destaque <span aria-hidden="true">↗</span></a>' : '') +
+    '</div></section><div class="estate-search-shell">' +
     '<form class="estate-search" id="search" aria-label="Filtrar imóveis">' +
     filters.map(([key,label,attributes]) => '<label>' + label + (key === 'kind'
       ? kindSelect(kinds, values.get(key), 'Todos os tipos')
       : '<input name="' + key + '" ' + attributes + ' value="' + escape(values.get(key)) + '">') +
       '</label>').join('') +
-    '<button type="submit">Buscar imóveis</button></form></div></section>' +
+    '<button type="submit">Buscar imóveis</button></form></div>' +
     '<section id="resultados" class="estate-results" aria-labelledby="listing-title"><div class="estate-section-head">' +
     '<h2 id="listing-title" tabindex="-1">' + escape(heading) + '</h2>' +
     (values.size ? '<a class="listing-action" href="' + storefrontHref('vitrine?' + section.toString()) + '">Limpar filtros</a>' : '') + '</div>' +
@@ -159,7 +170,11 @@ export async function storefront(params, isCurrent) {
 
   const activeBanner = app.querySelector('.estate-banner img');
   if (activeBanner) activeBanner.addEventListener('error', () => {
-    activeBanner.closest('.estate-banner').remove();
+    if (featuredImage && activeBanner.getAttribute('src') !== featuredImage) {
+      activeBanner.src = featuredImage;
+      return;
+    }
+    activeBanner.closest('.estate-banner')?.remove();
     app.querySelector('.estate-hero')?.classList.add('estate-hero-plain');
   });
   showPreviewBanner();
