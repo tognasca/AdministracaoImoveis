@@ -307,3 +307,57 @@ td input,td select { min-width: 140px; }
   .workspace .property-card { grid-template-columns:82px minmax(0,1fr); }
   .workspace .property-card-value { grid-column:1/-1; text-align:left; }
 }
+
+/* Administrative sign-in */
+.workspace main:has(.admin-signin) {
+  width: min(100%, 1120px);
+  min-height: 100svh;
+  display: grid;
+  align-items: center;
+  margin: auto;
+  padding: clamp(18px, 5vw, 62px);
+}
+.admin-signin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .9fr);
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid #dce3ed;
+  background: #fff;
+  color: #14253a;
+  box-shadow: 0 26px 70px #101e3224;
+}
+.admin-signin-art {
+  min-height: 460px;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  perspective: 650px;
+  background: radial-gradient(ellipse at 48% 42%, #345d88, #12243a 75%);
+}
+.admin-signin-art i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 41%;
+  height: 45%;
+  border: 1px solid #e4edf499;
+  border-radius: 7px;
+  background: repeating-linear-gradient(0deg,#ecf3ff30 0 2px,transparent 2px 23px),
+    linear-gradient(115deg,#e7c09c,#537399 80%);
+  box-shadow: 13px 14px 0 #0c172b, 22px 26px 35px #060c1a99;
+  transform: translate(-67%, -58%) rotateX(12deg) rotateY(-30deg) rotateZ(-8deg);
+}
+.admin-signin-art i:nth-child(2) { transform: translate(-23%, -33%) rotateX(12deg) rotateY(-30deg) rotateZ(-8deg); opacity: .82; }
+.admin-signin-art i:nth-child(3) { transform: translate(-105%, -24%) rotateX(12deg) rotateY(-30deg) rotateZ(-8deg); height: 30%; opacity: .65; }
+.admin-signin-panel { align-self: center; padding: clamp(24px, 4vw, 48px); }
+.admin-signin-back { display: inline-block; margin-bottom: 22px; font-size: .86rem; }
+.admin-signin-brand { font-size: .9rem; font-weight: 700; }
+.admin-signin-panel h1 { font: 750 clamp(1.55rem, 3vw, 2.15rem)/1.18 system-ui, sans-serif; margin-bottom: 22px; }
+.admin-signin #login { display: grid; gap: 14px; }
+.admin-password { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.admin-signin #login button[type=submit] { width: 100%; }
+@media (max-width: 700px) {
+  .admin-signin { grid-template-columns: minmax(0, 1fr); }
+  .admin-signin-art { min-height: 150px; }
+}
