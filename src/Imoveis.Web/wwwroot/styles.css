@@ -418,3 +418,37 @@ td input,td select { min-width: 140px; }
   .crm-split { grid-template-columns:minmax(0,1fr); gap:0; }
   .crm-inbox { max-height:34vh; overflow:auto; }
 }
+
+/* Compact desktop navigation and admin sign-in */
+#workspace-toggle { display:grid; place-items:center; padding:0; width:44px; min-height:44px; font-size:1.45rem; line-height:1; }
+.workspace-brand strong { overflow-wrap:anywhere; }
+@media (min-width:1051px) {
+  .workspace.workspace-sidebar-collapsed { --sidebar-width:76px; }
+  .workspace .workspace-top { display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .workspace.workspace-sidebar-collapsed .workspace-top { flex-direction:column; gap:14px; }
+  .workspace-sidebar-collapsed .workspace-brand strong { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  #workspace-toggle { flex:0 0 44px; }
+}
+.workspace:has(.admin-signin) main { max-width:none; padding:clamp(14px,5vw,72px); }
+.admin-signin {
+  display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);
+  width:min(100%,1040px); min-height:560px; margin:clamp(0px,4vh,48px) auto;
+  border:1px solid #ced8e4; border-radius:24px; overflow:hidden; background:#fff;
+  color:#16283d; box-shadow:0 28px 70px #122c4926;
+}
+.admin-signin-art { position:relative; isolation:isolate; overflow:hidden; display:grid; place-items:center; background:radial-gradient(ellipse at 15% 12%,#385b7d,#14283f 58%,#091729); perspective:750px; }
+.admin-signin-art i { position:absolute; width:49%; aspect-ratio:1; border:1px solid #d7b77c90; border-radius:10px; background:linear-gradient(140deg,#f4d49a5c,#7d9da021); box-shadow:0 24px 45px #09121a99; transform:rotateX(56deg) rotateZ(-34deg) translateZ(-65px); }
+.admin-signin-art i:nth-child(2) { transform:rotateX(56deg) rotateZ(-34deg) translateZ(15px); }
+.admin-signin-art i:nth-child(3) { transform:rotateX(56deg) rotateZ(-34deg) translateZ(95px); }
+.admin-signin-panel { align-self:center; padding:clamp(24px,4vw,58px); min-width:0; color-scheme:light; --ink:#16283d; --forest:#1d507d; --line:#bccad9; --surface:#fff; --quiet:#eaf1f9; }
+.admin-signin-back { display:inline-flex; align-items:center; min-height:44px; margin-bottom:16px; color:#264f71; text-underline-offset:4px; }
+.admin-signin-brand { color:#355574; font-size:.85rem; font-weight:700; }
+.admin-signin-panel h1 { font-size:clamp(2rem,4vw,3rem); line-height:1.06; margin-bottom:26px; }
+.admin-signin-panel form { display:grid; gap:18px; }
+.admin-password { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; }
+.workspace .admin-signin-panel :is(input,button) { min-height:44px; }
+@media(max-width:720px) {
+  .admin-signin { grid-template-columns:minmax(0,1fr); min-height:0; }
+  .admin-signin-art { min-height:150px; }
+  .admin-signin-art i { width:95px; }
+}
