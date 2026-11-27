@@ -36,6 +36,7 @@ async function verify() {
     });
     assert.equal(login.status(),204);
     await page.goto(api+'/#configuracoes');
+    await page.getByRole('button',{name:'Canais de publicação',exact:true}).click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       page.getByRole('link',{name:'Baixar arquivos da vitrine'}).click()

@@ -24,9 +24,9 @@ static class SessionEndpoints
             Results.Ok(new { username = user.Identity?.Name, administrator = user.IsInRole("Administrador") }));
         admin.MapPost("/logout", async (HttpContext ctx) =>
         {
-            await ctx.SignOutAsync();
+            await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.NoContent();
-        });
+        }).AllowAnonymous();
     }
 
     private record Login(string? Username, string? Password);
