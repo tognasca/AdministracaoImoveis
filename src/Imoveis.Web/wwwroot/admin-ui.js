@@ -1,4 +1,4 @@
-import {app, link, notice, report} from './ui.js';
+import {app, notice, report} from './ui.js';
 import {request} from './api.js';
 
 let session = null;
@@ -22,8 +22,8 @@ export function adminNav() {
   const management = [
     ['Gestão de locações','locacoes','▦'], ['Usuários','usuarios','♙'], ['Configurações','configuracoes','⚙'], ['Menu da vitrine','menu','≡']
   ];
-  return '<aside class="workspace-sidebar"><div class="workspace-top"><a href="/#painel" class="workspace-brand"><span aria-hidden="true">A</span> AdministraçãoImóveis</a>' +
-    '<button class="alt" id="workspace-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="false">Menu</button></div>' +
+  return '<aside class="workspace-sidebar"><div class="workspace-top"><a href="/#painel" class="workspace-brand"><span aria-hidden="true">A</span><strong>AdministraçãoImóveis</strong></a>' +
+    '<button class="alt" id="workspace-toggle" type="button" aria-controls="workspace-navigation" aria-expanded="false"><span aria-hidden="true">☰</span></button></div>' +
     '<nav id="workspace-navigation" aria-label="Painel administrativo"><p>Operação</p>' + operations.map(item).join('') +
     (session?.administrator ? '<p>Administração</p>' + management.map(item).join('') : '') +
     '<div class="workspace-utilities"><a class="workspace-link" href="/#vitrine">Abrir vitrine ↗</a>' +
@@ -47,7 +47,11 @@ export function bindLogout() {
     document.body.classList.toggle('workspace-menu-open',compact.matches && expanded);
     document.body.classList.toggle('workspace-sidebar-collapsed',!compact.matches && !expanded);
     nav.inert = !expanded;
-    toggle.textContent = expanded ? 'Fechar menu' : 'Menu';
+    const label = compact.matches ? (expanded ? 'Fechar menu' : 'Menu') :
+      (expanded ? 'Recolher menu lateral' : 'Expandir menu lateral');
+    toggle.setAttribute('aria-label',label);
+    toggle.title = label;
+    toggle.firstElementChild.textContent = compact.matches ? (expanded ? '×' : '☰') : (expanded ? '‹' : '›');
   };
   setExpanded(!compact.matches && preference('workspace-sidebar') !== 'closed');
   toggle.onclick = () => {
@@ -79,18 +83,45 @@ export function bindLogout() {
   };
   let wasCompact = compact.matches;
   window.addEventListener('resize',resize);
-  document.querySelector('#logout').onclick = async () => {
-    try { await request('/api/admin/logout', 'POST'); location.href = '/#vitrine'; }
-    catch (error) { report(error.message); }
+  const logout = document.querySelector('#logout');
+  logout.onclick = async () => {
+    logout.disabled = true;
+    try {
+      await request('/api/admin/logout','POST');
+      setSession(null);
+      location.replace('/admin');
+    } catch (error) {
+      report(error.message);
+      logout.disabled = false;
+    }
   };
 }
 export function login(render) {
-  app.innerHTML = '<div class="box"><h2>Painel administrativo</h2>' + notice +
-    '<form id="login"><label>Usuário<input name="username" required autocomplete="username" value="admin"></label><p></p><label>Senha<input name="password" type="password" autocomplete="current-password" required></label><p></p><button>Entrar</button></form></div>';
-  document.querySelector('#login').onsubmit = async event => {
+  setSession(null);
+  app.innerHTML = '<div class="admin-signin"><div class="admin-signin-art" aria-hidden="true"><i></i><i></i><i></i></div>' +
+    '<section class="admin-signin-panel" aria-labelledby="signin-title">' +
+    '<a class="admin-signin-back" href="/#vitrine">← Voltar à vitrine</a>' +
+    '<p class="admin-signin-brand">AdministraçãoImóveis</p><h1 id="signin-title">Acesso administrativo</h1>' + notice +
+    '<form id="login"><label>Usuário<input name="username" required autocomplete="username" value="admin"></label>' +
+    '<label>Senha<span class="admin-password"><input name="password" type="password" autocomplete="current-password" required>' +
+    '<button type="button" class="alt" aria-pressed="false">Mostrar</button></span></label>' +
+    '<button type="submit">Entrar</button></form></section></div>';
+  const form = app.querySelector('#login');
+  const password = form.elements.password;
+  const reveal = form.querySelector('button[type=button]');
+  reveal.onclick = () => {
+    const visible = password.type === 'password';
+    password.type = visible ? 'text' : 'password';
+    reveal.setAttribute('aria-pressed',String(visible));
+    reveal.textContent = visible ? 'Ocultar' : 'Mostrar';
+  };
+  const submit = form.querySelector('button[type=submit]');
+  form.onsubmit = async event => {
     event.preventDefault();
-    try { await request('/api/admin/login', 'POST', Object.fromEntries(new FormData(event.target))); render(); }
+    submit.disabled = true;
+    try { await request('/api/admin/login','POST',Object.fromEntries(new FormData(form))); render(); }
     catch (error) { report(error.status === 401 ? 'Usuário ou senha incorretos.' : error.message); }
+    finally { submit.disabled = false; }
   };
 }
 
