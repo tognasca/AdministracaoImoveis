@@ -31,7 +31,7 @@ function listingCard(home) {
     (d.kind ? '<p class="listing-kind">' + escape(d.kind) + '</p>' : '') +
     '<h3>' + escape(d.title) + '</h3>' +
     (place ? '<p class="listing-location">' + place + '</p>' : '') +
-    '<strong>' + money(d.price) + '</strong>' +
+    '<strong>' + listingPrice(d) + '</strong>' +
     (features.length ? '<ul class="listing-facts">' + features.map(value => '<li>' + value + '</li>').join('') + '</ul>' : '') +
     '</div><span class="listing-card-action">Ver imóvel <span aria-hidden="true">↗</span></span></div></a></article>';
 }
