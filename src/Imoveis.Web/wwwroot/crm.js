@@ -31,16 +31,35 @@ function whatsappLink(phone, reference) {
     '" target="_blank" rel="noopener noreferrer">WhatsApp</a>';
 }
 
-export async function crm(isActive, params = {queue:true, q:'', assignee:'', page:0}) {
+export async function crm(isActive, params = {queue:true, q:'', assignee:'', page:0,today:false}) {
   const version = ++renderVersion;
   const isCurrent = () => isActive() && app.contains(pipeline);
   const query = new URLSearchParams({q:params.q,assignee:params.assignee,queue:params.queue,
-    offset:params.page*pageSize,limit:pageSize+1});
-  const [result, staff] = await Promise.all([request(crmPath+'?'+query), request(crmPath+'/responsaveis')]);
+    today:!!params.today,offset:params.page*pageSize,limit:pageSize+1});
+  const [result, staff, session] = await Promise.all([request(crmPath+'?'+query), request(crmPath+'/responsaveis'),request('/api/admin/session')]);
   if (!isActive() || version !== renderVersion) return;
   if (!result.length && params.page > 0) return crm(isActive,{...params,page:params.page-1});
   const leads = result.slice(0,pageSize);
-  const selected = leads.find(lead => lead.id === params.selected) ?? leads[0];
+  const columns = params.queue ? stages.slice(0,1) : stages;
+  const currentStaff = staff.find(user => user.username === session.username)?.id;
+  const visitLabels = {scheduled:'Agendada',confirmed:'Confirmada',cancelled:'Cancelada'};
+  function actions(lead) {
+    const claim = lead.status === 'new' && !lead.assignedTo ?
+      '<button type="button" data-lead-action="assumir">Assumir atendimento</button>' : '';
+    const contact = lead.assignedTo === currentStaff && lead.status === 'new' ?
+      '<button type="button" class="alt" data-lead-action="primeiro-contato">Registrar primeiro contato</button>' : '';
+    const canVisit = lead.assignedTo === currentStaff && lead.propertyId && !['won','lost'].includes(lead.status);
+    const activeVisit = ['scheduled','confirmed'].includes(lead.visitState);
+    const visit = canVisit ? '<details><summary>'+ (activeVisit?'Gerenciar visita':'Marcar visita') +'</summary>'+
+      '<label>Data e hora da visita<input type="datetime-local" data-visit-at></label>'+
+      '<div class="row"><button type="button" data-lead-action="scheduled">'+(activeVisit?'Remarcar':'Agendar')+'</button>'+
+      (lead.visitState === 'scheduled' ? '<button type="button" class="alt" data-lead-action="confirmed">Confirmar</button>' : '')+
+      (activeVisit ? '<button type="button" class="alt" data-lead-action="cancelled">Cancelar visita</button>' : '')+
+      '</div></details>' : '';
+    return (lead.firstContactAt ? '<p>Primeiro contato: '+escape(new Date(lead.firstContactAt).toLocaleString('pt-BR'))+'</p>' : '')+
+      (lead.visitAt ? '<p>Visita '+visitLabels[lead.visitState]?.toLowerCase()+' · '+escape(new Date(lead.visitAt).toLocaleString('pt-BR'))+'</p>' : '')+
+      '<div class="row">'+claim+contact+'</div>'+visit;
+  }
   const options = selected => '<option value="">Sem responsável</option>' +
     (selected && !staff.some(user => user.id === selected) ?
       '<option value="'+escape(selected)+'" selected>Responsável inativo</option>' : '') +
@@ -68,7 +87,8 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
     '<section class="crm-pipeline"><h3>Fila de atendimento</h3>' +
     '<form id="crm-filters" class="box"><div class="grid"><label>Exibir<select name="queue">'+
     '<option value="true"'+(params.queue?' selected':'')+'>Novos sem responsável</option>'+
-    '<option value="false"'+(!params.queue?' selected':'')+'>Todos os contatos</option></select></label>'+
+    '<option value="false"'+(!params.queue&&!params.today?' selected':'')+'>Todos os contatos</option>'+
+    '<option value="today"'+(params.today?' selected':'')+'>Visitas de hoje</option></select></label>'+
     '<label>Buscar contatos<input name="q" type="search" maxlength="120" value="'+escape(params.q)+'" placeholder="Nome, telefone ou imóvel"></label>'+
     '<label>Filtrar por corretor<select name="assignee"'+(params.queue?' disabled':'')+'><option value="">Todos</option>'+
     '<option value="unassigned">Sem responsável</option>'+staff.map(user =>
@@ -88,12 +108,7 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
       (lead.status === 'new' && !lead.assignedTo ? '<p class="chips crm-wait">'+waitingSince(lead.createdAt)+'</p>' : '') +
       (lead.propertyCode ? '<p><a href="/#editar/'+escape(lead.propertyId)+'">'+
         escape(lead.propertyCode+' · '+lead.propertyTitle)+'</a></p>' : '') +
-      (lead.requestKind === 'visit' ? '<p>Visita solicitada · '+escape(lead.preferredVisitDate?.split('-').reverse().join('/'))+'</p>' : '') +
-      (lead.requestKind === 'proposal' ? '<p>Proposta de '+(lead.proposalOperation === 'rent' ? 'locação' : 'compra')+
-        ' · '+money(lead.proposedPrice)+(lead.proposalOperation === 'rent' ? '/mês' : '')+'</p>' : '') +
-      whatsappLink(lead.phone,lead.propertyCode) +
-      (lead.status==='won' && lead.propertyId && lead.proposalOperation ? '<button type="button" class="alt" data-close-offer>'+
-        (lead.proposalOperation==='sale' ? 'Marcar como vendido' : 'Marcar como locado')+'</button>' : '')+
+      whatsappLink(lead.phone,lead.propertyCode) + actions(lead) +
       '</div><label>Etapa<select name="status">'+stageOptions(lead.status)+'</select></label>' +
       links(lead)+'<label>Observações<textarea name="notes" maxlength="4000" rows="2">'+escape(lead.notes)+'</textarea></label>' +
       '<div><button type="submit" class="alt">Salvar</button>' +
@@ -117,7 +132,7 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
   filters.onsubmit = event => {
     event.preventDefault();
     const queue = filters.elements.queue.value === 'true';
-    navigate({queue,q:filters.elements.q.value.trim(),assignee:queue?'':filters.elements.assignee.value,page:0});
+    navigate({queue,today:filters.elements.queue.value === 'today',q:filters.elements.q.value.trim(),assignee:queue?'':filters.elements.assignee.value,page:0});
   };
   for (const button of pipeline.querySelectorAll('[data-crm-page]'))
     button.onclick = () => navigate({...params,page:params.page+(button.dataset.crmPage==='next'?1:-1)});
@@ -168,6 +183,26 @@ export async function crm(isActive, params = {queue:true, q:'', assignee:'', pag
     finally { button.disabled=false; }
   };
   for (const form of app.querySelectorAll('.crm-lead')) {
+    for (const control of form.querySelectorAll('[data-lead-action]')) {
+      control.onclick = async () => {
+        const action = control.dataset.leadAction;
+        const path = crmPath+'/'+encodeURIComponent(form.dataset.id);
+        control.disabled = true;
+        try {
+          if (action === 'assumir' || action === 'primeiro-contato') await request(path+'/'+action,'POST');
+          else {
+            const value = form.querySelector('[data-visit-at]').value;
+            if (action === 'scheduled' && (!value || new Date(value) <= new Date()))
+              throw Error('Selecione uma data e hora futuras.');
+            if (action === 'cancelled' && !confirm('Cancelar esta visita?')) return;
+            await request(path+'/visita','PUT',{state:action,at:action==='scheduled'?new Date(value).toISOString():null});
+          }
+          if (isCurrent()) await crm(isActive,action==='assumir'?{queue:false,assignee:currentStaff ?? '',q:'',page:0}:params);
+          if (isActive()) report('Atendimento atualizado.');
+        } catch (error) { if (isCurrent()) report(error.message); }
+        finally { control.disabled = false; }
+      };
+    }
     const history = form.querySelector('.lead-history');
     const events = history.querySelector('ol');
     const loadHistory = async () => {

@@ -222,6 +222,38 @@ const [matched] = await call(second,importPath+'/conferencia',200,'POST',{source
 assert.equal(matched.id,secondId);
 console.log('Isolamento de duas imobiliárias verificado por domínio, sessão, imóveis, fotos, exportação, usuários, CRM, vitrine e importação.');
 
+const {id:visitLead} = await call(first,crm,201,'POST',{name:'Contato com visita',status:'new',propertyId:firstId});
+await call(second,crm+'/'+visitLead+'/assumir',409,'POST');
+await call(first,crm+'/'+visitLead+'/assumir',204,'POST');
+await call(first,crm+'/'+visitLead+'/assumir',409,'POST');
+await call(first,crm+'/'+visitLead+'/primeiro-contato',204,'POST');
+const visit = crm+'/'+visitLead+'/visita';
+const future = new Date(Date.now()+86400000).toISOString();
+await call(first,visit,204,'PUT',{state:'scheduled',at:future});
+await call(second,visit,409,'PUT',{state:'confirmed'});
+await call(first,visit,204,'PUT',{state:'confirmed'});
+const [scheduled] = (await call(first,crm+'?status=visit',200)).filter(item => item.id===visitLead);
+assert.equal(scheduled.visitState,'confirmed');
+assert(scheduled.firstContactAt);
+await call(first,visit,204,'PUT',{state:'cancelled'});
+assert((await call(first,crm+'?status=contacted',200)).some(item => item.id===visitLead && item.visitState==='cancelled'));
+
+const olx = admin+'/integracoes/olx';
+const feedPath = '/integracoes/olx/feed.xml';
+await call(first,feedPath,404);
+await call(first,olx,204,'PUT',{origin:'https://imoveis-ci.test',email:'contato@example.test',
+  contactName:'Imobiliária de teste',phone:'11999991234',enabled:true});
+const listing = {zip:'06700-000',state:'SP',description:'Descrição pública de homologação do imóvel com mais de cinquenta caracteres.'};
+await call(second,olx+'/imoveis/'+firstId,400,'PUT',listing);
+await call(first,olx+'/imoveis/'+firstId,204,'PUT',listing);
+const feedXml = String(await call(first,feedPath,200));
+assert(feedXml.includes('<PostalCode>06700000</PostalCode>'));
+assert(feedXml.includes(firstId) && !feedXml.includes(secondId));
+await call(second,feedPath,404);
+await call(first,olx+'/imoveis/'+firstId,204,'DELETE');
+assert(!String(await call(first,feedPath,200)).includes(firstId));
+console.log('CRM e OLX: atendimento, visita, isolamento e publicação do feed verificados.');
+
 const operator = {...first, platformKey};
 const platform = '/api/platform/imobiliarias';
 const tenantInput = {
