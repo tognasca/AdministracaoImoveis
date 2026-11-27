@@ -97,34 +97,34 @@
   min-height: 42px;
 }
 .estate-search button:hover, .estate-contact .btn:hover { filter: none; text-decoration: underline; }
-.estate-results { width: min(100%, 1440px); margin-inline: auto; padding: clamp(28px, 5vw, 64px) clamp(16px, 5vw, 80px) 0; }
+.estate-results { width: min(100%, 1440px); margin-inline: auto; padding: clamp(22px, 3.5vw, 46px) clamp(16px, 5vw, 80px) 0; }
 .estate-section-head {
   display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap;
-  gap: 12px 24px; margin-bottom: clamp(24px, 4vw, 46px);
+  gap: 12px 24px; margin-bottom: clamp(16px, 2vw, 26px);
   border-bottom: 1px solid var(--estate-rule); padding-bottom: 14px;
 }
-.estate-section-head h2 { margin: 0; color: #26241f; font-size: clamp(2.1rem, 4.1vw, 3.85rem); line-height: 1.04; scroll-margin-top: 18px; }
+.estate-section-head h2 { margin: 0; color: #26241f; font-size: clamp(1.65rem, 2.6vw, 2.5rem); line-height: 1.04; scroll-margin-top: 18px; }
 .estate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: clamp(23px, 3.2vw, 46px) clamp(14px, 2.1vw, 26px); }
 .listing-card { display: flex; min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .listing-link { display: flex; flex: 1; flex-direction: column; min-width: 0; text-decoration: none; }
 .listing-link:focus-visible { outline-offset: 5px; }
 .listing-cover {
   position: relative; isolation: isolate; display: grid; align-content: end;
-  min-height: clamp(260px, 33vw, 470px); background: #dcd7ca; color: #fffdf8; overflow: hidden;
+  min-height: clamp(220px, 24vw, 330px); background: #dcd7ca; color: #fffdf8; overflow: hidden;
 }
 .listing-image { position: absolute; inset: 0; z-index: -2; display: block; width: 100%; height: 100%; object-fit: cover; }
 .listing-cover:not(.listing-cover-empty)::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background: linear-gradient(180deg, transparent 25%, #12131040 45%, #121310e8 100%);
 }
-.listing-cover-empty { color: var(--estate-ink); }
+.listing-cover-empty { color: #26241f; }
 .listing-placeholder {
   position: absolute; top: 17px; left: clamp(17px, 3vw, 33px);
   font-size: .78rem; color: #46554c;
 }
-.listing-caption { padding: clamp(17px, 3.1vw, 38px); }
+.listing-caption { padding: clamp(14px, 1.9vw, 24px); }
 .listing-kind { margin: 0 0 7px; font-size: .72rem; letter-spacing: .15em; font-weight: 650; text-transform: uppercase; overflow-wrap: anywhere; }
-.listing-card h3 { margin: 0; font-size: clamp(1.75rem, 3.3vw, 3.05rem); line-height: 1.03; overflow-wrap: anywhere; }
+.listing-card h3 { margin: 0; font-size: clamp(1.3rem, 2vw, 1.85rem); line-height: 1.16; overflow-wrap: anywhere; }
 .listing-location { margin: 8px 0 0; font-size: .86rem; overflow-wrap: anywhere; }
 .listing-body {
   flex: 1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
@@ -207,8 +207,8 @@
 .estate-site[data-estate-template="commercial"] {
   --estate-paper:#eef3f8; --estate-ink:#18344e; --estate-rule:#cbd9e6;
 }
-.estate-site[data-estate-template="commercial"] .listing-cover { min-height:clamp(230px,28vw,380px); }
-.estate-site[data-estate-template="commercial"] .listing-card h3 { font-family:system-ui,sans-serif; font-size:clamp(1.4rem,2.4vw,2.1rem); font-weight:700; }
+.estate-site[data-estate-template="commercial"] .listing-cover { min-height:clamp(220px,24vw,330px); }
+.estate-site[data-estate-template="commercial"] .listing-card h3 { font-family:system-ui,sans-serif; font-size:clamp(1.3rem,2vw,1.85rem); font-weight:700; }
 .estate-site[data-estate-template="commercial"] .estate-hero h1 { font-family:system-ui,sans-serif; font-weight:750; }
 
 /* Five presentations share markup, media and listing data. */
@@ -240,8 +240,7 @@
 .estate-site[data-estate-template="boutique"] .estate-hero-copy { text-align:left; }
 .estate-site[data-estate-template="boutique"] .listing-cover { border-radius:40% 40% 0 0 / 20% 20% 0 0; }
 @media(min-width:1100px) {
-  .estate-site[data-estate-template="commercial"] .estate-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
-  .estate-site[data-estate-template="commercial"] .listing-cover { min-height:260px; }
+  .estate-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
 @media(max-width:560px) {
   .estate-site .estate-hero,.estate-site[data-estate-template="premium"] .estate-hero { min-height:0; }
