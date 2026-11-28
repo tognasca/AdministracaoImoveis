@@ -28,9 +28,14 @@ static class OlxEndpoints
             var email = input.Email?.Trim() ?? "";
             var name = input.ContactName?.Trim() ?? "";
             var phone = input.Phone?.Trim() ?? "";
+            if (!Uri.TryCreate(input.Origin?.Trim(), UriKind.Absolute, out var origin) || origin.Scheme != "https"
+                || origin.UserInfo.Length > 0 || origin.PathAndQuery != "/" || origin.Fragment.Length > 0)
+                return Results.BadRequest("Informe somente o endereço base HTTPS da sua vitrine, sem caminho ou parâmetros.");
+            if (origin.Host.Equals("olx.com.br", StringComparison.OrdinalIgnoreCase)
+                || origin.Host.EndsWith(".olx.com.br", StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest("Informe o domínio HTTPS da sua vitrine para gerar o XML. Um endereço da OLX não é o domínio da vitrine.");
             if (name.Length is < 2 or > 100 || name.Any(char.IsControl) || phone.Count(char.IsAsciiDigit) is < 10 or > 15 ||
-                phone.Length > 25 || phone.Any(c => !char.IsAsciiDigit(c) && !"+()- .".Contains(c)) || !Uri.TryCreate(input.Origin?.Trim(),UriKind.Absolute,out var origin) ||
-                origin.Scheme != "https" || origin.UserInfo.Length>0 || origin.PathAndQuery!="/" || origin.Fragment.Length>0 ||
+                phone.Length > 25 || phone.Any(c => !char.IsAsciiDigit(c) && !"+()- .".Contains(c)) ||
                 email.Length > 254 || !MailAddress.TryCreate(email,out var address) || address.Address!=email)
                 return Results.BadRequest("Informe a URL HTTPS da vitrine, nome, telefone e e-mail de contato.");
             await using var cmd = db.CreateCommand("""
