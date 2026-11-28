@@ -145,8 +145,8 @@ export function mountImport(ui) {
     try {
       const {settings,url} = await request(path);
       if (!holder.isConnected || !isCurrent()) return;
-      holder.innerHTML = '<h3>Integração OLX · VRSync</h3><form id="olx-feed" class="grid">'+
-        '<label>URL HTTPS da vitrine<input name="origin" type="url" required value="'+escape(settings?.origin ?? '')+'"></label>'+
+      holder.innerHTML = '<h3>Publicar imóveis na OLX (VRSync)</h3><p>Gere o XML dos imóveis publicados na sua vitrine e cadastre o endereço do feed no Canal Pro. Para trazer imóveis de outra fonte, envie o arquivo XML ou VRSync na seção Importar arquivos.</p><form id="olx-feed" class="grid">'+
+        '<label>Endereço base da sua vitrine<input name="origin" type="url" required placeholder="https://imoveis.suaempresa.com.br" aria-describedby="olx-origin-help" value="'+escape(settings?.origin ?? '')+'"><small id="olx-origin-help">Use o domínio da sua vitrine. Links de anúncios da OLX são páginas e não contêm o XML do feed.</small></label>'+
         '<label>Nome do contato<input name="contactName" maxlength="100" required value="'+escape(settings?.contactName ?? '')+'"></label>'+
         '<label>E-mail do contato<input name="email" type="email" required value="'+escape(settings?.email ?? '')+'"></label>'+
         '<label>Telefone do contato<input name="phone" type="tel" maxlength="25" required value="'+escape(settings?.phone ?? '')+'"></label>'+
@@ -155,7 +155,7 @@ export function mountImport(ui) {
         (settings?.enabled && url ? '<p>URL para cadastrar no Canal Pro</p><input aria-label="URL do feed" readonly value="'+escape(url)+'">'+
           '<div class="row"><a class="btn alt" target="_blank" rel="noopener noreferrer" href="'+escape(url)+'">Abrir XML VRSync</a></div>' : '')+
         '<form id="olx-search" class="row"><label>Buscar imóvel publicado<input name="query" type="search" maxlength="120"></label>'+
-        '<button class="alt">Buscar</button></form><form id="olx-listing" class="grid">'+
+        '<button class="alt">Buscar no catálogo</button></form><form id="olx-listing" class="grid">'+
         '<label>Imóvel<select name="property" required><option value="">Busque um imóvel</option></select></label>'+
         '<label>CEP<input name="zip" required maxlength="9" inputmode="numeric"></label>'+
         '<label>UF<input name="state" required maxlength="2"></label>'+
@@ -176,6 +176,11 @@ export function mountImport(ui) {
         event.preventDefault();
         perform(async () => {
           const values = Object.fromEntries(new FormData(feed));
+          const origin = new URL(values.origin.trim());
+          if (origin.hostname === 'olx.com.br' || origin.hostname.endsWith('.olx.com.br'))
+            throw Error('Este é um endereço da OLX. Informe o domínio HTTPS da sua vitrine para gerar o XML. Para importar, selecione um arquivo XML ou VRSync.');
+          if (origin.protocol !== 'https:' || origin.pathname !== '/' || origin.search || origin.hash || origin.username || origin.password)
+            throw Error('Informe somente o endereço base HTTPS da sua vitrine, sem caminho ou parâmetros.');
           await request(path,'PUT',{...values,enabled:feed.elements.enabled.checked});
           await mountOlx();
           holder.querySelector('#olx-feedback').textContent = 'Configuração salva.';
@@ -184,7 +189,10 @@ export function mountImport(ui) {
       search.onsubmit = event => {
         event.preventDefault();
         perform(async () => {
-          const homes = await request('/api/imoveis?q='+encodeURIComponent(search.elements.query.value.trim()));
+          const query = search.elements.query.value.trim();
+          if (/^https?:\/\//i.test(query))
+            throw Error('A busca consulta imóveis já publicados no seu catálogo. Use título, código ou localização.');
+          const homes = await request('/api/imoveis?q='+encodeURIComponent(query));
           property.replaceChildren(new Option('Selecione um imóvel',''),
             ...homes.map(home => new Option(home.data.code+' · '+home.data.title,home.id)));
           property.onchange();
@@ -221,7 +229,7 @@ export function mountImport(ui) {
     start(1);
     app.insertAdjacentHTML('beforeend','<section class="box" id="olx-integration" hidden></section>');
     mountOlx();
-    app.insertAdjacentHTML('beforeend','<section class="box"><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON, XML ou VRSync. No Excel, será usada a primeira aba.</p>'+
+    app.insertAdjacentHTML('beforeend','<section class="box"><h3>Importar arquivos</h3><div class="row"><a class="btn alt" href="/#pdf">Tratar PDF</a></div><p>Envie Excel (.xlsx), CSV, TXT delimitado, JSON, XML ou VRSync. No Excel, será usada a primeira aba.</p>'+
       '<label class="import-drop">Arraste o arquivo aqui ou selecione no dispositivo<input id="import-file" type="file" accept=".xlsx,.csv,.txt,.json,.xml,.vrsync"></label>'+
       '<p></p><button class="alt" id="example">Baixar CSV de exemplo</button></section><section class="box" id="saved-models"><h3>Mapeamentos salvos</h3><p>Carregando modelos…</p></section><section class="box" id="history"><h3>Últimas importações</h3><p>Carregando histórico…</p></section>');
     const exports = '/api/admin/exportacoes/imoveis?limit=5000&format=';
